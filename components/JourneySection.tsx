@@ -53,7 +53,7 @@ export default function JourneySection() {
           <span className="inline-block text-gold text-sm font-medium tracking-wide uppercase mb-3">
             Our Progress
           </span>
-          <h2 className="section-title text-gray-900">
+          <h2 className="section-title text-warm-brown">
             {t('journey.title')}
           </h2>
           <p className="section-subtitle">
@@ -85,7 +85,7 @@ export default function JourneySection() {
                 {/* Content */}
                 <div className="pb-10">
                   <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900">
+                    <h3 className="text-lg font-semibold text-warm-brown">
                       {t(`journey.${milestone.key}.title`)}
                     </h3>
                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -121,7 +121,7 @@ export default function JourneySection() {
 
         {/* Bottom Card */}
         <div className="mt-12 card text-center max-w-2xl mx-auto bg-cream-50">
-          <h3 className="text-xl font-semibold text-gray-900 mb-3">
+          <h3 className="text-xl font-semibold text-warm-brown mb-3">
             {t('journey.continuesTitle')}
           </h3>
           <p className="text-gray-600">

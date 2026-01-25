@@ -44,7 +44,7 @@ export default function ProblemSection() {
           <span className="inline-block text-warm-brown text-sm font-medium tracking-wide uppercase mb-3">
             The Challenge
           </span>
-          <h2 className="section-title text-gray-900">
+          <h2 className="section-title text-warm-brown">
             {t('problem.title')}
           </h2>
           <p className="section-subtitle">
@@ -62,7 +62,7 @@ export default function ProblemSection() {
               <div className={`icon-circle ${problem.color} mb-5`}>
                 {problem.icon}
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">
+              <h3 className="text-xl font-semibold text-warm-brown mb-3">
                 {t(`problem.${problem.key}.title`)}
               </h3>
               <p className="text-gray-600 leading-relaxed">

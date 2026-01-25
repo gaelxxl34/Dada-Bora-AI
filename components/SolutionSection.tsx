@@ -80,7 +80,7 @@ export default function SolutionSection() {
           <span className="inline-block text-gold text-sm font-medium tracking-wide uppercase mb-3">
             Our Solution
           </span>
-          <h2 className="section-title text-gray-900">
+          <h2 className="section-title text-warm-brown">
             {t('solution.title')}
           </h2>
           <p className="section-subtitle">
@@ -98,7 +98,7 @@ export default function SolutionSection() {
                   {feature.icon}
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  <h3 className="text-lg font-semibold text-warm-brown mb-1">
                     {t(`solution.${feature.key}.title`)}
                   </h3>
                   <p className="text-gray-600">
@@ -121,7 +121,7 @@ export default function SolutionSection() {
 
         {/* How It Works */}
         <div className="bg-cream-50 rounded-2xl p-8 lg:p-12">
-          <h3 className="text-2xl lg:text-3xl font-playfair font-bold text-gray-900 text-center mb-12">
+          <h3 className="text-2xl lg:text-3xl font-playfair font-bold text-warm-brown text-center mb-12">
             {t('solution.simpleTitle')}
           </h3>
           
@@ -138,7 +138,7 @@ export default function SolutionSection() {
                   {step.icon}
                 </div>
                 
-                <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                <h4 className="text-lg font-semibold text-warm-brown mb-2">
                   {t(`solution.steps.${step.key}.title`)}
                 </h4>
                 <p className="text-gray-600 text-sm">

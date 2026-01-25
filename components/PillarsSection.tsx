@@ -47,7 +47,7 @@ export default function PillarsSection() {
           <span className="inline-block text-warm-brown text-sm font-medium tracking-wide uppercase mb-3">
             Holistic Care
           </span>
-          <h2 className="section-title text-gray-900">
+          <h2 className="section-title text-warm-brown">
             {t('pillars.title')}
           </h2>
           <p className="section-subtitle">
@@ -67,7 +67,7 @@ export default function PillarsSection() {
                 {pillar.icon}
               </div>
               
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">
+              <h3 className="text-xl font-semibold text-warm-brown mb-3">
                 {t(`pillars.${pillar.key}.title`)}
               </h3>
               
@@ -95,7 +95,7 @@ export default function PillarsSection() {
 
         {/* Bottom Card */}
         <div className="card text-center max-w-3xl mx-auto">
-          <h3 className="text-xl lg:text-2xl font-semibold text-gray-900 mb-3">
+          <h3 className="text-xl lg:text-2xl font-semibold text-warm-brown mb-3">
             {t('pillars.holisticTitle')}
           </h3>
           <p className="text-gray-600 leading-relaxed">

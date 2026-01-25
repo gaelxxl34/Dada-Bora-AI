@@ -1,24 +1,21 @@
 
 'use client';
 
-import { useState } from 'react';
-import WaitlistModal from './WaitlistModal';
 import { useLanguage } from '../contexts/LanguageContext';
 
 export default function HeroSection() {
-  const [showWaitlist, setShowWaitlist] = useState(false);
   const { t } = useLanguage();
 
   return (
     <section className="relative min-h-screen flex items-center">
-      {/* Background Image with Subtle Overlay */}
+      {/* Background Image */}
       <div 
         className="absolute inset-0 bg-cover bg-center"
         style={{
           backgroundImage: `url('https://readdy.ai/api/search-image?query=Beautiful%20confident%20Black%20women%20smiling%20together%2C%20sitting%20in%20a%20bright%20modern%20wellness%20space%20with%20natural%20lighting%2C%20soft%20earth%20tones%20and%20cream%20colors%2C%20one%20woman%20journaling%20while%20another%20meditates%2C%20peaceful%20and%20empowering%20atmosphere%2C%20professional%20photography%20style%20with%20warm%20golden%20hour%20lighting%20and%20minimalist%20African-inspired%20decor%20elements&width=1920&height=1080&seq=hero1&orientation=landscape')`
         }}
       />
-      <div className="absolute inset-0 bg-gradient-to-r from-warm-brown/90 via-warm-brown/70 to-warm-brown/40" />
+      <div className="absolute inset-0 bg-gradient-to-r from-warm-brown/70 via-warm-brown/40 to-transparent" />
       
       {/* Content */}
       <div className="relative z-10 container-narrow w-full py-20">
@@ -45,16 +42,6 @@ export default function HeroSection() {
               </svg>
               {t('hero.chatWhatsApp')}
             </a>
-            
-            <button 
-              onClick={() => setShowWaitlist(true)}
-              className="inline-flex items-center justify-center gap-2 border-2 border-white/80 text-white px-8 py-4 rounded-full font-semibold transition-all duration-200 hover:bg-white hover:text-warm-brown"
-            >
-              {t('hero.joinWaitlist')}
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-            </button>
           </div>
         </div>
       </div>
@@ -65,8 +52,6 @@ export default function HeroSection() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
         </svg>
       </div>
-      
-      <WaitlistModal isOpen={showWaitlist} onClose={() => setShowWaitlist(false)} />
     </section>
   );
 }

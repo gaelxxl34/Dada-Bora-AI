@@ -74,7 +74,7 @@ export default function TeamSection() {
                 {member.initials}
               </div>
               
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">
+              <h3 className="text-lg font-semibold text-warm-brown mb-1">
                 {t(`team.members.${member.key}.name`)}
               </h3>
               
@@ -91,7 +91,7 @@ export default function TeamSection() {
 
         {/* Expertise Section */}
         <div className="card text-center max-w-2xl mx-auto">
-          <h3 className="text-xl font-semibold text-gray-900 mb-3">
+          <h3 className="text-xl font-semibold text-warm-brown mb-3">
             {t('team.diverseTitle')}
           </h3>
           <p className="text-gray-600 mb-6 leading-relaxed">

@@ -17,6 +17,7 @@
     "@types/react-dom": "^19",
     "@types/twilio": "^3.19.2",
     "autoprefixer": "^10.4.21",
+    "baseline-browser-mapping": "^2.9.18",
     "cross-env": "^7.0.3",
     "eslint": "^9.37.0",
     "postcss": "^8.5.5",
@@ -28,6 +29,7 @@
   "scripts": {
     "build": "next build",
     "dev": "cross-env NODE_ENV=development next dev -H 0.0.0.0 -p 3000",
+    "start": "next start",
     "lint": "next lint",
     "create-admin": "node scripts/create-super-admin.mjs"
   },

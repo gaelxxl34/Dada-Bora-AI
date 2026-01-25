@@ -12,6 +12,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://dadaboraai.com'),
   title: 'Dada Bora AI - The Big Sister You Wish You Had | AI Wellness for Black Women',
   description: 'Dada Bora AI is your 24/7 AI-powered wellness companion built specifically for Black women. Get culturally grounded support for mental health, hair & skin care, menstrual cycle tracking, and holistic wellness through WhatsApp. Available in English and French.',
   keywords: [
@@ -152,7 +153,7 @@ export default function RootLayout({
   };
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="mobile-web-app-capable" content="yes" />
