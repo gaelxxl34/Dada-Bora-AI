@@ -1,0 +1,48 @@
+{
+  "name": "Dada Bora AI - Your AI Wellness Companion",
+  "short_name": "Dada Bora",
+  "description": "AI-powered wellness companion for Black women. Get 24/7 support for mental health, beauty care, and holistic guidance.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#8B6F47",
+  "theme_color": "#D4AF37",
+  "orientation": "portrait",
+  "categories": ["health", "lifestyle", "wellness"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot1.png",
+      "sizes": "540x720",
+      "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Chat on WhatsApp",
+      "short_name": "Chat",
+      "description": "Start chatting with Dada Bora on WhatsApp",
+      "url": "https://wa.me/243856223405",
+      "icons": [
+        {
+          "src": "/whatsapp-icon.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ]
+}

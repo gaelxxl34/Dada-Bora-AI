@@ -1,0 +1,12 @@
+# robots.txt for Dada Bora AI
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /_next/
+Disallow: /admin/
+
+# Sitemap
+Sitemap: https://dadaboraai.com/sitemap.xml
+
+# Crawl-delay for all bots
+Crawl-delay: 1
