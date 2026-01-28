@@ -1,9 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '../../../../lib/firebase-admin';
+import { requireAuth, applyRateLimit } from '../../../../lib/auth-middleware';
 import { Timestamp } from 'firebase-admin/firestore';
 
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting (5 requests per minute for user creation)
+    const rateLimitResult = applyRateLimit(request, 5, 60000);
+    if (!rateLimitResult.allowed) {
+      return rateLimitResult.response;
+    }
+
+    // Require authentication
+    const authResult = await requireAuth(request);
+    if ('error' in authResult) {
+      return authResult.error;
+    }
+
+    // Check if the authenticated user has admin privileges
+    const adminUser = await adminDb.collection('users').doc(authResult.user.uid).get();
+    const adminData = adminUser.data();
+    if (!adminData || (adminData.role !== 'admin' && adminData.role !== 'super_admin')) {
+      return NextResponse.json(
+        { error: 'Forbidden. Only administrators can create users.' },
+        { status: 403 }
+      );
+    }
+
     const { name, email, password, role } = await request.json();
 
     // Validate required fields

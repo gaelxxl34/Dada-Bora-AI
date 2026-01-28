@@ -2,10 +2,13 @@
  * API Route for handling incoming WhatsApp messages via Twilio
  * This creates new chats with anonymous usernames and stores messages
  * Then calls AI to generate a response and sends it back via WhatsApp
+ * 
+ * SECURITY: This endpoint validates Twilio signatures and has rate limiting
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
+import { applyRateLimit } from '@/lib/auth-middleware';
 import { generateAnonymousName, generateChatId, validateMessage, sanitizeMessage, hashPhoneNumber } from '@/lib/chat-utils';
 import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import twilio from 'twilio';
@@ -13,24 +16,36 @@ import twilio from 'twilio';
 // Mark route as dynamic (required for API routes with POST/GET handlers)
 export const dynamic = 'force-dynamic';
 
-// Validate Twilio signature for security
+// Validate Twilio signature for security - THIS IS CRITICAL
 async function validateTwilioSignature(request: NextRequest, body: string): Promise<boolean> {
   try {
     const configDoc = await adminDb.collection('integrations').doc('whatsapp').get();
     const config = configDoc.data();
     
     if (!config?.authToken) {
-      console.warn('No Twilio auth token configured, skipping signature validation');
-      return true; // Skip validation if not configured (for sandbox testing)
+      console.error('SECURITY WARNING: No Twilio auth token configured - rejecting request');
+      return false; // REJECT if not configured - don't allow unauthenticated requests
     }
 
     const signature = request.headers.get('x-twilio-signature') || '';
+    
+    if (!signature) {
+      console.error('SECURITY WARNING: No Twilio signature in request');
+      return false;
+    }
+    
     const url = request.url;
     
     // Parse form data for validation
     const params = Object.fromEntries(new URLSearchParams(body));
     
-    return twilio.validateRequest(config.authToken, signature, url, params);
+    const isValid = twilio.validateRequest(config.authToken, signature, url, params);
+    
+    if (!isValid) {
+      console.error('SECURITY WARNING: Invalid Twilio signature - possible spoofed request');
+    }
+    
+    return isValid;
   } catch (error) {
     console.error('Error validating Twilio signature:', error);
     return false;
@@ -246,6 +261,13 @@ async function sendWhatsAppMessage(to: string, message: string): Promise<{ succe
 
 export async function POST(request: NextRequest) {
   try {
+    // Apply aggressive rate limiting per IP (100 requests per minute - Twilio might send bursts)
+    const rateLimitResult = applyRateLimit(request, 100, 60000);
+    if (!rateLimitResult.allowed) {
+      console.error('SECURITY: Rate limit exceeded for WhatsApp webhook');
+      return rateLimitResult.response;
+    }
+
     // Check if integration is enabled
     const configDoc = await adminDb.collection('integrations').doc('whatsapp').get();
     const config = configDoc.data();
@@ -261,16 +283,14 @@ export async function POST(request: NextRequest) {
     const formData = await request.text();
     const body = Object.fromEntries(new URLSearchParams(formData));
     
-    // Log the incoming payload for debugging
-    console.log('Twilio WhatsApp webhook payload:', JSON.stringify(body, null, 2));
+    // Log the incoming payload for debugging (remove sensitive data in production)
+    console.log('Twilio WhatsApp webhook received message');
 
-    // Validate Twilio signature (optional for sandbox, recommended for production)
-    if (config.validateSignature) {
-      const isValid = await validateTwilioSignature(request, formData);
-      if (!isValid) {
-        console.error('Invalid Twilio signature');
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
-      }
+    // ALWAYS validate Twilio signature in production for security
+    const isValid = await validateTwilioSignature(request, formData);
+    if (!isValid) {
+      console.error('SECURITY: Invalid Twilio signature - rejecting request');
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
     }
 
     // Handle Twilio WhatsApp webhook format

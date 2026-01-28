@@ -6,6 +6,7 @@ import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
+import { apiPost } from '@/lib/api-client';
 
 interface TwilioWhatsAppConfig {
   accountSid: string;
@@ -158,16 +159,11 @@ export default function WhatsAppIntegrationPage() {
         
         // Now send a test message via our API
         const testNumber = '256726455053'; // Your sandbox participant number
-        const sendResponse = await fetch('/api/whatsapp/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: testNumber,
-            message: '🎉 Test message from Dada Bora! Your WhatsApp integration is working perfectly.',
-          })
+        const sendData = await apiPost<{ messageSid: string }>('/api/whatsapp/send', {
+          to: testNumber,
+          message: '🎉 Test message from Dada Bora! Your WhatsApp integration is working perfectly.',
         });
 
-        const sendData = await sendResponse.json();
         console.log('Send response:', sendData);
 
         if (sendData.success) {

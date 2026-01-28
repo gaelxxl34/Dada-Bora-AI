@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { collection, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
+import { apiPost } from '../../../lib/api-client';
 import DashboardLayout from '../../../components/dashboard/DashboardLayout';
 import UserModal from '../../../components/dashboard/UserModal';
 
@@ -91,23 +92,15 @@ export default function UsersPage() {
           updatedAt: Timestamp.now(),
         });
       } else {
-        // Create new user via API
-        const response = await fetch('/api/users/create', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: userData.name,
-            email: userData.email,
-            password: userData.password,
-            role: userData.role,
-          }),
+        // Create new user via authenticated API
+        const result = await apiPost('/api/users/create', {
+          name: userData.name,
+          email: userData.email,
+          password: userData.password,
+          role: userData.role,
         });
 
-        const result = await response.json();
-
-        if (!response.ok) {
+        if (!result.success) {
           throw new Error(result.error || 'Failed to create user');
         }
       }

@@ -2,10 +2,12 @@
  * API Route for testing AI connection
  * Tests OpenAI or Anthropic API based on configured provider
  * Includes knowledge base content for personalized responses
+ * PROTECTED: Requires authentication
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
+import { requireAuth, applyRateLimit } from '@/lib/auth-middleware';
 
 // Mark route as dynamic
 export const dynamic = 'force-dynamic';
@@ -36,6 +38,18 @@ async function getKnowledgeBaseContent(): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting (10 requests per minute)
+    const rateLimitResult = applyRateLimit(request, 10, 60000);
+    if (!rateLimitResult.allowed) {
+      return rateLimitResult.response;
+    }
+
+    // Require authentication
+    const authResult = await requireAuth(request);
+    if ('error' in authResult) {
+      return authResult.error;
+    }
+
     // Get AI config from Firestore
     const configDoc = await adminDb.collection('integrations').doc('chatbot').get();
     const config = configDoc.data();
@@ -171,18 +185,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error testing AI connection:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: errorMessage },
       { status: 500 }
     );
   }
 }
 
-// GET endpoint for quick health check
-export async function GET() {
+// GET endpoint for quick health check - minimal info, no sensitive data exposed
+export async function GET(request: NextRequest) {
   try {
+    // Apply rate limiting
+    const rateLimitResult = applyRateLimit(request, 30, 60000);
+    if (!rateLimitResult.allowed) {
+      return rateLimitResult.response;
+    }
+
+    // Require authentication for health check too
+    const authResult = await requireAuth(request);
+    if ('error' in authResult) {
+      return authResult.error;
+    }
+
     const configDoc = await adminDb.collection('integrations').doc('chatbot').get();
     const config = configDoc.data();
 
@@ -193,17 +220,17 @@ export async function GET() {
       });
     }
 
+    // Don't expose sensitive info like API key existence to unauthenticated users
     return NextResponse.json({
       status: config.enabled ? 'enabled' : 'disabled',
       provider: config.provider,
       model: config.model,
-      hasApiKey: config.provider === 'openai' 
-        ? !!config.openaiApiKey 
-        : !!config.anthropicApiKey,
+      configured: true,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json(
-      { error: error.message },
+      { error: errorMessage },
       { status: 500 }
     );
   }

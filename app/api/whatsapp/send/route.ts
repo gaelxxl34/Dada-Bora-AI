@@ -1,9 +1,11 @@
 /**
  * API Route for sending messages via Twilio WhatsApp
+ * PROTECTED: Requires authentication
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
+import { requireAuth, applyRateLimit } from '@/lib/auth-middleware';
 import twilio from 'twilio';
 
 // Mark route as dynamic
@@ -11,6 +13,18 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting (20 messages per minute)
+    const rateLimitResult = applyRateLimit(request, 20, 60000);
+    if (!rateLimitResult.allowed) {
+      return rateLimitResult.response;
+    }
+
+    // Require authentication
+    const authResult = await requireAuth(request);
+    if ('error' in authResult) {
+      return authResult.error;
+    }
+
     const body = await request.json();
     const { to, message, mediaUrl } = body;
 

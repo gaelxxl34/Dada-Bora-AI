@@ -6,6 +6,7 @@ import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
+import { apiPost } from '@/lib/api-client';
 
 interface ChatbotConfig {
   provider: 'openai' | 'anthropic';
@@ -126,13 +127,7 @@ export default function ChatbotSettingsPage() {
     setTestLoading(true);
 
     try {
-      const response = await fetch('/api/ai/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage }),
-      });
-
-      const data = await response.json();
+      const data = await apiPost<{ response: string }>('/api/ai/test', { message: userMessage });
 
       if (data.success && data.response) {
         setTestMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
