@@ -10,7 +10,6 @@ import ArticleModal from '../../../components/dashboard/ArticleModal';
 interface Category {
   id: string;
   name: string;
-  description: string;
   color: string;
   count: number;
   createdAt: Date;
@@ -25,7 +24,6 @@ interface Article {
   categoryName: string;
   status: 'published' | 'draft' | 'review';
   views: number;
-  tags: string[];
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
@@ -92,8 +90,7 @@ export default function KnowledgeBasePage() {
     const matchesCategory = selectedCategory === 'all' || article.categoryId === selectedCategory;
     const matchesSearch = !searchQuery || 
       article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      article.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      article.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+      article.content.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
@@ -106,13 +103,12 @@ export default function KnowledgeBasePage() {
   };
 
   // Handle create/update category
-  const handleSaveCategory = async (categoryData: { name: string; description: string; color: string }) => {
+  const handleSaveCategory = async (categoryData: { name: string; color: string }) => {
     try {
       if (editingCategory) {
         // Update existing category
         await updateDoc(doc(db, 'knowledgeCategories', editingCategory.id), {
           name: categoryData.name,
-          description: categoryData.description,
           color: categoryData.color,
           updatedAt: Timestamp.now(),
         });
@@ -120,7 +116,6 @@ export default function KnowledgeBasePage() {
         // Create new category
         await addDoc(collection(db, 'knowledgeCategories'), {
           name: categoryData.name,
-          description: categoryData.description,
           color: categoryData.color,
           count: 0,
           createdAt: Timestamp.now(),
@@ -141,7 +136,6 @@ export default function KnowledgeBasePage() {
     content: string;
     categoryId: string;
     status: 'draft' | 'review' | 'published';
-    tags: string[];
   }) => {
     try {
       const category = categories.find(c => c.id === articleData.categoryId);
@@ -156,7 +150,6 @@ export default function KnowledgeBasePage() {
           categoryId: articleData.categoryId,
           categoryName: category.name,
           status: articleData.status,
-          tags: articleData.tags,
           updatedAt: Timestamp.now(),
         });
 
@@ -177,7 +170,6 @@ export default function KnowledgeBasePage() {
           categoryId: articleData.categoryId,
           categoryName: category.name,
           status: articleData.status,
-          tags: articleData.tags,
           views: 0,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),

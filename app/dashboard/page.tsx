@@ -1,16 +1,118 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import DashboardLayout from '../../components/dashboard/DashboardLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import Link from 'next/link';
 
+interface ActivityLog {
+  id: string;
+  action: string;
+  user: string;
+  createdAt: Date;
+  type: 'user' | 'knowledge' | 'settings' | 'partner' | 'chat';
+}
+
 export default function DashboardPage() {
   const { userProfile, user } = useAuth();
+  const [usersCount, setUsersCount] = useState(0);
+  const [articlesCount, setArticlesCount] = useState(0);
+  const [categoriesCount, setCategoriesCount] = useState(0);
+  const [recentActivities, setRecentActivities] = useState<ActivityLog[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load users count
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
+      setUsersCount(snapshot.size);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Load articles count
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'knowledgeArticles'), (snapshot) => {
+      setArticlesCount(snapshot.size);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Load categories count
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'knowledgeCategories'), (snapshot) => {
+      setCategoriesCount(snapshot.size);
+      setIsLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Load recent activities (from activity logs or create from recent data)
+  useEffect(() => {
+    // Try to load from activityLogs collection, or create from recent users/articles
+    const activitiesQuery = query(
+      collection(db, 'activityLogs'),
+      orderBy('createdAt', 'desc'),
+      limit(5)
+    );
+
+    const unsubscribe = onSnapshot(activitiesQuery, (snapshot) => {
+      if (snapshot.empty) {
+        // If no activity logs, we'll show recent data
+        setRecentActivities([]);
+      } else {
+        const activities = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate() || new Date(),
+        })) as ActivityLog[];
+        setRecentActivities(activities);
+      }
+    }, (error) => {
+      console.error('Error loading activities:', error);
+      setRecentActivities([]);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Format relative time
+  const formatRelativeTime = (date: Date) => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString();
+  };
+
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'user':
+        return { icon: 'ri-user-add-line', bg: 'bg-green-100', color: 'text-green-600' };
+      case 'knowledge':
+        return { icon: 'ri-file-edit-line', bg: 'bg-blue-100', color: 'text-blue-600' };
+      case 'settings':
+        return { icon: 'ri-settings-3-line', bg: 'bg-gray-100', color: 'text-gray-600' };
+      case 'partner':
+        return { icon: 'ri-handshake-line', bg: 'bg-purple-100', color: 'text-purple-600' };
+      case 'chat':
+        return { icon: 'ri-chat-3-line', bg: 'bg-amber-100', color: 'text-amber-600' };
+      default:
+        return { icon: 'ri-notification-line', bg: 'bg-gray-100', color: 'text-gray-600' };
+    }
+  };
 
   const stats = [
     {
       title: 'Total Users',
-      value: '1,234',
+      value: isLoading ? '...' : usersCount.toLocaleString(),
       change: '+12%',
       changeType: 'positive',
       icon: 'ri-user-line',
@@ -19,16 +121,16 @@ export default function DashboardPage() {
     },
     {
       title: 'Knowledge Articles',
-      value: '56',
-      change: '+3',
-      changeType: 'positive',
+      value: isLoading ? '...' : articlesCount.toString(),
+      change: `${categoriesCount} categories`,
+      changeType: 'neutral',
       icon: 'ri-book-open-line',
       bgColor: 'bg-purple-50',
       iconColor: 'text-purple-600',
     },
     {
       title: 'Active Sessions',
-      value: '89',
+      value: '0',
       change: 'Live',
       changeType: 'neutral',
       icon: 'ri-pulse-line',
@@ -37,53 +139,26 @@ export default function DashboardPage() {
     },
     {
       title: 'AI Interactions',
-      value: '12.5K',
-      change: '+28%',
-      changeType: 'positive',
+      value: '0',
+      change: 'This month',
+      changeType: 'neutral',
       icon: 'ri-robot-line',
       bgColor: 'bg-amber-50',
       iconColor: 'text-amber-600',
     },
   ];
 
-  const recentActivities = [
+  const defaultActivities = [
     {
-      id: 1,
-      action: 'New user registered',
-      user: 'maria@example.com',
-      time: '2 minutes ago',
-      icon: 'ri-user-add-line',
-      iconBg: 'bg-green-100',
-      iconColor: 'text-green-600',
-    },
-    {
-      id: 2,
-      action: 'Knowledge base updated',
+      id: '1',
+      action: 'System initialized',
       user: 'System',
-      time: '15 minutes ago',
-      icon: 'ri-file-edit-line',
-      iconBg: 'bg-blue-100',
-      iconColor: 'text-blue-600',
-    },
-    {
-      id: 3,
-      action: 'Settings changed',
-      user: 'admin@dadabora.com',
-      time: '1 hour ago',
-      icon: 'ri-settings-3-line',
-      iconBg: 'bg-gray-100',
-      iconColor: 'text-gray-600',
-    },
-    {
-      id: 4,
-      action: 'New partner added',
-      user: 'admin@dadabora.com',
-      time: '3 hours ago',
-      icon: 'ri-handshake-line',
-      iconBg: 'bg-purple-100',
-      iconColor: 'text-purple-600',
+      createdAt: new Date(),
+      type: 'settings' as const,
     },
   ];
+
+  const displayActivities = recentActivities.length > 0 ? recentActivities : defaultActivities;
 
   return (
     <DashboardLayout
@@ -131,21 +206,33 @@ export default function DashboardPage() {
           </div>
           <div className="p-4 sm:p-6">
             <div className="space-y-3 sm:space-y-4">
-              {recentActivities.map((activity) => (
-                <div
-                  key={activity.id}
-                  className="flex items-center gap-3 sm:gap-4 p-2 sm:p-3 rounded-lg sm:rounded-xl hover:bg-gray-50 transition-colors"
-                >
-                  <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg ${activity.iconBg} flex items-center justify-center flex-shrink-0`}>
-                    <i aria-hidden="true" className={`${activity.icon} ${activity.iconColor} text-sm sm:text-base`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">{activity.action}</p>
-                    <p className="text-xs text-gray-500 truncate">{activity.user}</p>
-                  </div>
-                  <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:block">{activity.time}</span>
+              {displayActivities.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <i aria-hidden="true" className="ri-history-line text-4xl mb-2 block" />
+                  <p className="text-sm">No recent activity</p>
                 </div>
-              ))}
+              ) : (
+                displayActivities.map((activity) => {
+                  const activityStyle = getActivityIcon(activity.type);
+                  return (
+                    <div
+                      key={activity.id}
+                      className="flex items-center gap-3 sm:gap-4 p-2 sm:p-3 rounded-lg sm:rounded-xl hover:bg-gray-50 transition-colors"
+                    >
+                      <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg ${activityStyle.bg} flex items-center justify-center flex-shrink-0`}>
+                        <i aria-hidden="true" className={`${activityStyle.icon} ${activityStyle.color} text-sm sm:text-base`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">{activity.action}</p>
+                        <p className="text-xs text-gray-500 truncate">{activity.user}</p>
+                      </div>
+                      <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:block">
+                        {formatRelativeTime(activity.createdAt)}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -165,7 +252,7 @@ export default function DashboardPage() {
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-gray-900">Add New User</p>
-                <p className="text-xs text-gray-500 hidden sm:block">Invite team members</p>
+                <p className="text-xs text-gray-500 hidden sm:block">Create new accounts</p>
               </div>
             </Link>
 

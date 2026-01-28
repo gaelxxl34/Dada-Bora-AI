@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import DashboardLayout from '../../../components/dashboard/DashboardLayout';
 import UserModal from '../../../components/dashboard/UserModal';
@@ -11,7 +11,6 @@ interface User {
   name: string;
   email: string;
   role: 'admin' | 'partner' | 'user' | 'agent';
-  status: 'active' | 'inactive' | 'pending';
   createdAt: Date;
   lastActive: Date;
 }
@@ -44,7 +43,6 @@ export default function UsersPage() {
           ...data,
           name,
           role: role as 'admin' | 'partner' | 'user' | 'agent',
-          status: data.status || 'active',
           createdAt: data.createdAt?.toDate(),
           lastActive: data.lastActive?.toDate() || data.createdAt?.toDate(),
         };
@@ -72,9 +70,8 @@ export default function UsersPage() {
   // Calculate stats
   const stats = {
     total: users.length,
-    active: users.filter(u => u.status === 'active').length,
+    admins: users.filter(u => u.role === 'admin').length,
     partners: users.filter(u => u.role === 'partner').length,
-    pending: users.filter(u => u.status === 'pending').length,
     agents: users.filter(u => u.role === 'agent').length,
   };
 
@@ -83,7 +80,7 @@ export default function UsersPage() {
     name: string;
     email: string;
     role: 'admin' | 'partner' | 'user' | 'agent';
-    status: 'active' | 'inactive' | 'pending';
+    password?: string;
   }) => {
     try {
       if (editingUser) {
@@ -91,20 +88,28 @@ export default function UsersPage() {
         await updateDoc(doc(db, 'users', editingUser.id), {
           name: userData.name,
           role: userData.role,
-          status: userData.status,
           updatedAt: Timestamp.now(),
         });
       } else {
-        // Create new user
-        await addDoc(collection(db, 'users'), {
-          name: userData.name,
-          email: userData.email,
-          role: userData.role,
-          status: userData.status,
-          createdAt: Timestamp.now(),
-          lastActive: Timestamp.now(),
-          updatedAt: Timestamp.now(),
+        // Create new user via API
+        const response = await fetch('/api/users/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: userData.name,
+            email: userData.email,
+            password: userData.password,
+            role: userData.role,
+          }),
         });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to create user');
+        }
       }
       setEditingUser(null);
     } catch (error) {
@@ -174,18 +179,7 @@ export default function UsersPage() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-700';
-      case 'inactive':
-        return 'bg-gray-100 text-gray-700';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-700';
-      default:
-        return 'bg-gray-100 text-gray-700';
-    }
-  };
+
 
   return (
     <DashboardLayout
@@ -218,12 +212,12 @@ export default function UsersPage() {
         </div>
         <div className="bg-white rounded-xl p-3 sm:p-4 border border-gray-100">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
-              <i aria-hidden="true" className="ri-user-follow-line text-green-600" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+              <i aria-hidden="true" className="ri-shield-star-line text-purple-600" />
             </div>
             <div className="min-w-0">
-              <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.active}</p>
-              <p className="text-xs text-gray-500">Active</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.admins}</p>
+              <p className="text-xs text-gray-500">Admins</p>
             </div>
           </div>
         </div>
@@ -318,13 +312,6 @@ export default function UsersPage() {
                         <i aria-hidden="true" className={`${getRoleIcon(user.role)} text-xs`} />
                         {user.role}
                       </span>
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusBadge(user.status)}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${
-                          user.status === 'active' ? 'bg-green-500' : 
-                          user.status === 'pending' ? 'bg-yellow-500' : 'bg-gray-400'
-                        }`} />
-                        {user.status}
-                      </span>
                     </div>
                     <p className="text-xs text-gray-400 mt-1">Joined {user.createdAt ? formatRelativeTime(user.createdAt) : 'Unknown'}</p>
                   </div>
@@ -360,9 +347,6 @@ export default function UsersPage() {
                   Role
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Joined
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -376,13 +360,13 @@ export default function UsersPage() {
             <tbody className="divide-y divide-gray-50">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center">
+                  <td colSpan={5} className="px-4 py-8 text-center">
                     <div className="w-8 h-8 border-2 border-warm-brown/20 border-t-warm-brown rounded-full animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center">
+                  <td colSpan={5} className="px-4 py-12 text-center">
                     <div className="text-gray-400">
                       <i aria-hidden="true" className="ri-user-line text-4xl mb-2 block" />
                       <p className="text-sm">No users found</p>
@@ -407,15 +391,6 @@ export default function UsersPage() {
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium capitalize ${getRoleBadge(user.role)}`}>
                         <i aria-hidden="true" className={`${getRoleIcon(user.role)} text-xs`} />
                         {user.role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium capitalize ${getStatusBadge(user.status)}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${
-                          user.status === 'active' ? 'bg-green-500' : 
-                          user.status === 'pending' ? 'bg-yellow-500' : 'bg-gray-400'
-                        }`} />
-                        {user.status}
                       </span>
                     </td>
                     <td className="px-4 py-4">

@@ -37,6 +37,30 @@ async function validateTwilioSignature(request: NextRequest, body: string): Prom
   }
 }
 
+// Helper function to fetch knowledge base content
+async function getKnowledgeBaseContent(): Promise<string> {
+  try {
+    const articlesSnapshot = await adminDb
+      .collection('knowledgeArticles')
+      .where('status', '==', 'published')
+      .get();
+
+    if (articlesSnapshot.empty) {
+      return '';
+    }
+
+    const articles = articlesSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return `## ${data.title}\nCategory: ${data.categoryName}\n${data.content}`;
+    });
+
+    return `\n\n---\n\nKNOWLEDGE BASE:\nThe following is your knowledge base containing verified information. Use this to provide accurate, consistent responses:\n\n${articles.join('\n\n---\n\n')}`;
+  } catch (error) {
+    console.error('Error fetching knowledge base:', error);
+    return '';
+  }
+}
+
 // Get AI response from configured provider
 async function getAIResponse(userMessage: string, chatHistory: Array<{role: string, content: string}> = []): Promise<string> {
   try {
@@ -50,9 +74,13 @@ async function getAIResponse(userMessage: string, chatHistory: Array<{role: stri
 
     const { provider, openaiApiKey, anthropicApiKey, model, systemPrompt, temperature, maxTokens } = config;
 
+    // Fetch knowledge base content and combine with system prompt
+    const knowledgeBaseContent = await getKnowledgeBaseContent();
+    const enhancedSystemPrompt = systemPrompt + knowledgeBaseContent;
+
     if (provider === 'openai' && openaiApiKey) {
       const messages = [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: enhancedSystemPrompt },
         ...chatHistory,
         { role: 'user', content: userMessage }
       ];
@@ -96,7 +124,7 @@ async function getAIResponse(userMessage: string, chatHistory: Array<{role: stri
         body: JSON.stringify({
           model: model || 'claude-3-opus-20240229',
           max_tokens: maxTokens || 500,
-          system: systemPrompt,
+          system: enhancedSystemPrompt,
           messages,
         }),
       });

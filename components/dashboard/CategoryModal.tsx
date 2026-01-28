@@ -5,8 +5,8 @@ import { useState, useEffect } from 'react';
 interface CategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (category: { name: string; description: string; color: string }) => Promise<void>;
-  editCategory?: { id: string; name: string; description: string; color: string } | null;
+  onSave: (category: { name: string; color: string }) => Promise<void>;
+  editCategory?: { id: string; name: string; color: string } | null;
 }
 
 const colorOptions = [
@@ -22,18 +22,15 @@ const colorOptions = [
 
 export default function CategoryModal({ isOpen, onClose, onSave, editCategory }: CategoryModalProps) {
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
   const [color, setColor] = useState('blue');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (editCategory) {
       setName(editCategory.name);
-      setDescription(editCategory.description);
       setColor(editCategory.color);
     } else {
       setName('');
-      setDescription('');
       setColor('blue');
     }
   }, [editCategory, isOpen]);
@@ -42,9 +39,8 @@ export default function CategoryModal({ isOpen, onClose, onSave, editCategory }:
     e.preventDefault();
     setIsLoading(true);
     try {
-      await onSave({ name, description, color });
+      await onSave({ name, color });
       setName('');
-      setDescription('');
       setColor('blue');
       onClose();
     } catch (error) {
@@ -87,21 +83,6 @@ export default function CategoryModal({ isOpen, onClose, onSave, editCategory }:
               placeholder="e.g., Maternal Health, Nutrition, etc."
               required
               className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-brown/20 focus:border-warm-brown"
-            />
-          </div>
-
-          {/* Description */}
-          <div>
-            <label htmlFor="categoryDescription" className="block text-sm font-medium text-gray-700 mb-2">
-              Description
-            </label>
-            <textarea
-              id="categoryDescription"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Brief description of this category..."
-              rows={3}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-brown/20 focus:border-warm-brown resize-none"
             />
           </div>
 

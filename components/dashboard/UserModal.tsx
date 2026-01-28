@@ -9,14 +9,13 @@ interface UserModalProps {
     name: string;
     email: string;
     role: 'admin' | 'partner' | 'user' | 'agent';
-    status: 'active' | 'inactive' | 'pending';
+    password?: string;
   }) => Promise<void>;
   editUser?: {
     id: string;
     name: string;
     email: string;
     role: 'admin' | 'partner' | 'user' | 'agent';
-    status: 'active' | 'inactive' | 'pending';
   } | null;
 }
 
@@ -24,7 +23,7 @@ export default function UserModal({ isOpen, onClose, onSave, editUser }: UserMod
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'partner' | 'user' | 'agent'>('user');
-  const [status, setStatus] = useState<'active' | 'inactive' | 'pending'>('pending');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -32,12 +31,11 @@ export default function UserModal({ isOpen, onClose, onSave, editUser }: UserMod
       setName(editUser.name);
       setEmail(editUser.email);
       setRole(editUser.role);
-      setStatus(editUser.status);
     } else {
       setName('');
       setEmail('');
       setRole('user');
-      setStatus('pending');
+      setPassword('');
     }
   }, [editUser, isOpen]);
 
@@ -49,12 +47,12 @@ export default function UserModal({ isOpen, onClose, onSave, editUser }: UserMod
         name,
         email,
         role,
-        status,
+        ...(password && !editUser ? { password } : {}),
       });
       setName('');
       setEmail('');
       setRole('user');
-      setStatus('pending');
+      setPassword('');
       onClose();
     } catch (error) {
       console.error('Error saving user:', error);
@@ -137,22 +135,25 @@ export default function UserModal({ isOpen, onClose, onSave, editUser }: UserMod
             </select>
           </div>
 
-          {/* Status */}
-          <div>
-            <label htmlFor="userStatus" className="block text-sm font-medium text-gray-700 mb-2">
-              Status <span className="text-red-500">*</span>
-            </label>
-            <select
-              id="userStatus"
-              value={status}
-              onChange={(e) => setStatus(e.target.value as 'active' | 'inactive' | 'pending')}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-brown/20 focus:border-warm-brown"
-            >
-              <option value="pending">Pending - Awaiting activation</option>
-              <option value="active">Active - Full access</option>
-              <option value="inactive">Inactive - Suspended access</option>
-            </select>
-          </div>
+          {/* Password - Only for new users */}
+          {!editUser && (
+            <div>
+              <label htmlFor="userPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                Password <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                id="userPassword"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                required={!editUser}
+                minLength={6}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-brown/20 focus:border-warm-brown"
+              />
+              <p className="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-100">
@@ -166,10 +167,10 @@ export default function UserModal({ isOpen, onClose, onSave, editUser }: UserMod
             </button>
             <button
               type="submit"
-              disabled={isLoading || !name.trim() || !email.trim()}
+              disabled={isLoading || !name.trim() || !email.trim() || (!editUser && password.length < 6)}
               className="w-full sm:flex-1 px-4 py-2.5 bg-warm-brown text-white rounded-lg text-sm font-medium hover:bg-amber-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? 'Saving...' : editUser ? 'Update User' : 'Send Invite'}
+              {isLoading ? 'Saving...' : editUser ? 'Update User' : 'Create User'}
             </button>
           </div>
         </form>

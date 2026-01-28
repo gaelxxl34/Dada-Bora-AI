@@ -1,6 +1,7 @@
 /**
  * API Route for testing AI connection
  * Tests OpenAI or Anthropic API based on configured provider
+ * Includes knowledge base content for personalized responses
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,6 +9,30 @@ import { adminDb } from '@/lib/firebase-admin';
 
 // Mark route as dynamic
 export const dynamic = 'force-dynamic';
+
+// Helper function to fetch knowledge base content
+async function getKnowledgeBaseContent(): Promise<string> {
+  try {
+    const articlesSnapshot = await adminDb
+      .collection('knowledgeArticles')
+      .where('status', '==', 'published')
+      .get();
+
+    if (articlesSnapshot.empty) {
+      return '';
+    }
+
+    const articles = articlesSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return `## ${data.title}\nCategory: ${data.categoryName}\n${data.content}`;
+    });
+
+    return `\n\n---\n\nKNOWLEDGE BASE:\nThe following is your knowledge base containing verified information. Use this to provide accurate, consistent responses:\n\n${articles.join('\n\n---\n\n')}`;
+  } catch (error) {
+    console.error('Error fetching knowledge base:', error);
+    return '';
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,6 +48,10 @@ export async function POST(request: NextRequest) {
     }
 
     const { provider, openaiApiKey, anthropicApiKey, model, systemPrompt, temperature, maxTokens } = config;
+
+    // Fetch knowledge base content and combine with system prompt
+    const knowledgeBaseContent = await getKnowledgeBaseContent();
+    const enhancedSystemPrompt = systemPrompt + knowledgeBaseContent;
 
     // Get the test message from request body (optional)
     const body = await request.json().catch(() => ({}));
@@ -47,7 +76,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           model: model || 'gpt-4-turbo-preview',
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: enhancedSystemPrompt },
             { role: 'user', content: testMessage }
           ],
           temperature: temperature || 0.7,
@@ -101,7 +130,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           model: model || 'claude-3-opus-20240229',
           max_tokens: maxTokens || 500,
-          system: systemPrompt,
+          system: enhancedSystemPrompt,
           messages: [
             { role: 'user', content: testMessage }
           ],

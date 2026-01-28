@@ -16,7 +16,6 @@ interface ArticleModalProps {
     content: string;
     categoryId: string;
     status: 'draft' | 'review' | 'published';
-    tags: string[];
   }) => Promise<void>;
   categories: Category[];
   editArticle?: {
@@ -25,7 +24,6 @@ interface ArticleModalProps {
     content: string;
     categoryId: string;
     status: 'draft' | 'review' | 'published';
-    tags: string[];
   } | null;
 }
 
@@ -34,8 +32,6 @@ export default function ArticleModal({ isOpen, onClose, onSave, categories, edit
   const [content, setContent] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [status, setStatus] = useState<'draft' | 'review' | 'published'>('draft');
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -44,26 +40,13 @@ export default function ArticleModal({ isOpen, onClose, onSave, categories, edit
       setContent(editArticle.content);
       setCategoryId(editArticle.categoryId);
       setStatus(editArticle.status);
-      setTags(editArticle.tags || []);
     } else {
       setTitle('');
       setContent('');
       setCategoryId('');
       setStatus('draft');
-      setTags([]);
     }
   }, [editArticle, isOpen]);
-
-  const handleAddTag = () => {
-    if (tagInput.trim() && !tags.includes(tagInput.trim())) {
-      setTags([...tags, tagInput.trim()]);
-      setTagInput('');
-    }
-  };
-
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTags(tags.filter(tag => tag !== tagToRemove));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,13 +57,11 @@ export default function ArticleModal({ isOpen, onClose, onSave, categories, edit
         content,
         categoryId,
         status,
-        tags,
       });
       setTitle('');
       setContent('');
       setCategoryId('');
       setStatus('draft');
-      setTags([]);
       onClose();
     } catch (error) {
       console.error('Error saving article:', error);
@@ -183,50 +164,6 @@ export default function ArticleModal({ isOpen, onClose, onSave, categories, edit
             <p className="text-xs text-gray-500 mt-1">
               {content.length} characters
             </p>
-          </div>
-
-          {/* Tags */}
-          <div>
-            <label htmlFor="articleTags" className="block text-sm font-medium text-gray-700 mb-2">
-              Tags
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                id="articleTags"
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                placeholder="Add tags..."
-                className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-warm-brown/20 focus:border-warm-brown"
-              />
-              <button
-                type="button"
-                onClick={handleAddTag}
-                className="px-3 sm:px-4 py-2 sm:py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors flex-shrink-0"
-              >
-                Add
-              </button>
-            </div>
-            {tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-3">
-                {tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-warm-brown/10 text-warm-brown rounded-full text-xs font-medium"
-                  >
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTag(tag)}
-                      className="hover:bg-warm-brown/20 rounded-full p-0.5"
-                    >
-                      <i aria-hidden="true" className="ri-close-line text-sm" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Actions */}
