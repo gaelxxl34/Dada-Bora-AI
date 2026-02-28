@@ -395,12 +395,12 @@ export default function WhatsAppIntegrationPage() {
                   type="text"
                   value={config.twilioWhatsAppNumber}
                   onChange={(e) => setConfig({ ...config, twilioWhatsAppNumber: e.target.value })}
-                  placeholder="+14155238886"
+                  placeholder="+19405003523"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-brown focus:border-transparent"
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   {config.sandboxMode 
-                    ? 'Sandbox number: +1 (415) 523-8886 (or check your Twilio Sandbox settings)'
+                    ? 'Sandbox number: +1 (940) 500-3523 (or check your Twilio Sandbox settings)'
                     : 'Your registered Twilio WhatsApp Business number'}
                 </p>
               </div>

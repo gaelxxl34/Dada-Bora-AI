@@ -34,7 +34,18 @@ async function validateTwilioSignature(request: NextRequest, body: string): Prom
       return false;
     }
     
-    const url = request.url;
+    // Reconstruct the original URL that Twilio used to sign the request
+    // This is necessary because proxies (Cloudflare, Vercel) change the URL
+    const forwardedProto = request.headers.get('x-forwarded-proto') || 'https';
+    const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host');
+    const pathname = new URL(request.url).pathname;
+    
+    // Use the forwarded URL if available, otherwise fall back to request.url
+    const url = forwardedHost 
+      ? `${forwardedProto}://${forwardedHost}${pathname}`
+      : request.url;
+    
+    console.log('Validating Twilio signature with URL:', url);
     
     // Parse form data for validation
     const params = Object.fromEntries(new URLSearchParams(body));
@@ -43,6 +54,11 @@ async function validateTwilioSignature(request: NextRequest, body: string): Prom
     
     if (!isValid) {
       console.error('SECURITY WARNING: Invalid Twilio signature - possible spoofed request');
+      console.error('Debug info:', { 
+        signatureReceived: signature.substring(0, 10) + '...', 
+        url,
+        hasAuthToken: !!config.authToken,
+      });
     }
     
     return isValid;
@@ -259,12 +275,35 @@ async function sendWhatsAppMessage(to: string, message: string): Promise<{ succe
   }
 }
 
+// Helper function to log webhook activity for debugging
+async function logWebhookActivity(data: {
+  type: string;
+  status: 'success' | 'error';
+  from?: string;
+  error?: string;
+  details?: Record<string, unknown>;
+}) {
+  try {
+    await adminDb.collection('webhookLogs').add({
+      ...data,
+      timestamp: Timestamp.now(),
+    });
+  } catch (err) {
+    console.error('Failed to log webhook activity:', err);
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Apply aggressive rate limiting per IP (100 requests per minute - Twilio might send bursts)
     const rateLimitResult = applyRateLimit(request, 100, 60000);
     if (!rateLimitResult.allowed) {
       console.error('SECURITY: Rate limit exceeded for WhatsApp webhook');
+      await logWebhookActivity({
+        type: 'rate_limit',
+        status: 'error',
+        error: 'Rate limit exceeded',
+      });
       return rateLimitResult.response;
     }
 
@@ -273,6 +312,11 @@ export async function POST(request: NextRequest) {
     const config = configDoc.data();
     
     if (!config?.enabled) {
+      await logWebhookActivity({
+        type: 'disabled',
+        status: 'error',
+        error: 'WhatsApp integration is disabled',
+      });
       return NextResponse.json(
         { error: 'WhatsApp integration is disabled' },
         { status: 403 }
@@ -290,6 +334,16 @@ export async function POST(request: NextRequest) {
     const isValid = await validateTwilioSignature(request, formData);
     if (!isValid) {
       console.error('SECURITY: Invalid Twilio signature - rejecting request');
+      await logWebhookActivity({
+        type: 'signature_invalid',
+        status: 'error',
+        from: body.From?.replace('whatsapp:', '').substring(0, 10) + '...',
+        error: 'Invalid Twilio signature',
+        details: {
+          hasSignature: !!request.headers.get('x-twilio-signature'),
+          url: request.url,
+        },
+      });
       return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
     }
 
@@ -385,6 +439,18 @@ export async function POST(request: NextRequest) {
     });
 
     console.log(`Message stored successfully for chat ${chatDocId}`);
+    
+    // Log successful message receipt
+    await logWebhookActivity({
+      type: 'message_received',
+      status: 'success',
+      from: phoneNumber.substring(0, 10) + '...',
+      details: {
+        chatId: chatDocId,
+        anonymousName,
+        hasMedia: numMedia > 0,
+      },
+    });
 
     // Get recent chat history for context (last 5 messages for speed)
     const recentMessages = await messagesRef
@@ -448,6 +514,15 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Error processing Twilio WhatsApp message:', error);
+    // Log the error
+    await logWebhookActivity({
+      type: 'processing_error',
+      status: 'error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      details: {
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+    });
     // Return TwiML error response
     return new NextResponse(
       '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',

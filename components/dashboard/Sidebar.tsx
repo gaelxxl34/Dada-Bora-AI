@@ -41,6 +41,12 @@ const menuItems = [
     icon: 'ri-settings-3-line',
     activeIcon: 'ri-settings-3-fill',
   },
+  {
+    name: 'Debug',
+    href: '/dashboard/debug',
+    icon: 'ri-bug-line',
+    activeIcon: 'ri-bug-fill',
+  },
 ];
 
 export default function Sidebar({ onSignOut, userRole, isOpen, onClose }: SidebarProps) {
