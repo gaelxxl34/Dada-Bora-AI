@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
       } else {
         const isConfigured = !!whatsappConfig.accountSid && 
                             !!whatsappConfig.authToken && 
-                            !!whatsappConfig.phoneNumber;
+                            !!whatsappConfig.twilioWhatsAppNumber;
         
         diagnostics.push({
           name: 'WhatsApp/Twilio Configuration',
@@ -118,9 +118,9 @@ export async function GET(request: NextRequest) {
           details: {
             hasAccountSid: !!whatsappConfig.accountSid,
             hasAuthToken: !!whatsappConfig.authToken,
-            hasPhoneNumber: !!whatsappConfig.phoneNumber,
-            phoneNumber: whatsappConfig.phoneNumber ? 
-              whatsappConfig.phoneNumber.substring(0, 10) + '...' : null,
+            hasPhoneNumber: !!whatsappConfig.twilioWhatsAppNumber,
+            phoneNumber: whatsappConfig.twilioWhatsAppNumber ? 
+              whatsappConfig.twilioWhatsAppNumber.substring(0, 10) + '...' : null,
             enabled: whatsappConfig.enabled,
           },
           duration: Date.now() - twilioStart,
