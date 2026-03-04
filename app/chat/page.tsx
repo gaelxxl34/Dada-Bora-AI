@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import PhoneInput from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
+import { chatTranslations, detectBrowserLanguage, type ChatLanguage } from '@/lib/chat-translations';
 
 // Types
 interface Message {
@@ -43,6 +44,10 @@ export default function WebChatPage() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [micPermission, setMicPermission] = useState<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown');
   
+  // Language state
+  const [lang, setLang] = useState<ChatLanguage>('en');
+  const t = useMemo(() => chatTranslations[lang], [lang]);
+  
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -58,6 +63,11 @@ export default function WebChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
+
+  // Detect browser language on mount
+  useEffect(() => {
+    setLang(detectBrowserLanguage());
+  }, []);
 
   // Check if browser supports speech recognition & mic permission
   useEffect(() => {
@@ -163,13 +173,7 @@ export default function WebChatPage() {
     // If already denied, tell user how to fix it — getUserMedia won't re-prompt
     if (permState === 'denied') {
       setMicPermission('denied');
-      setError(
-        'Microphone is blocked for this site. To fix:\n' +
-        '1. Click the 🔒 icon (or tune icon) in the address bar\n' +
-        '2. Find "Microphone" and set it to "Allow"\n' +
-        '3. Reload the page and try again\n\n' +
-        'On Mac: also check System Settings → Privacy & Security → Microphone → allow your browser.'
-      );
+      setError(t.micBlocked);
       return;
     }
 
@@ -183,17 +187,11 @@ export default function WebChatPage() {
       setMicPermission('denied');
       const errName = err instanceof DOMException ? err.name : '';
       if (errName === 'NotAllowedError') {
-        setError(
-          'Microphone access was denied. To fix:\n' +
-          '1. Click the 🔒 icon (or tune icon) in the address bar\n' +
-          '2. Find "Microphone" and set it to "Allow"\n' +
-          '3. Reload the page and try again\n\n' +
-          'On Mac: also check System Settings → Privacy & Security → Microphone → allow your browser.'
-        );
+        setError(t.micDenied);
       } else if (errName === 'NotFoundError') {
-        setError('No microphone detected. Please connect a microphone and try again.');
+        setError(t.noMic);
       } else {
-        setError('Could not access microphone. Please check your browser and system settings.');
+        setError(t.micError);
       }
       return;
     }
@@ -204,7 +202,7 @@ export default function WebChatPage() {
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    recognition.lang = lang === 'fr' ? 'fr-FR' : 'en-US';
 
     recognition.onstart = () => setIsRecording(true);
     
@@ -233,7 +231,7 @@ export default function WebChatPage() {
       console.error('Speech recognition error:', event.error);
       if (event.error === 'not-allowed') {
         setMicPermission('denied');
-        setError('Microphone access denied. Please allow microphone in your browser settings.');
+        setError(t.micAccessDenied);
       }
       setIsRecording(false);
     };
@@ -275,6 +273,7 @@ export default function WebChatPage() {
         body: JSON.stringify({
           sessionId: session.sessionId,
           message: messageContent,
+          language: lang,
         }),
       });
 
@@ -297,13 +296,13 @@ export default function WebChatPage() {
           localStorage.removeItem('dada_session');
           setSession(null);
           setView('phone');
-          setError('Your session has expired. Please verify your phone number again.');
+          setError(t.sessionExpired);
         } else {
           setError(data.error);
         }
       }
     } catch {
-      setError('Failed to send message. Please try again.');
+      setError(t.failedSend);
     } finally {
       setLoading(false);
     }
@@ -389,10 +388,10 @@ export default function WebChatPage() {
         setOtpCode(['', '', '', '', '', '']);
         setTimeout(() => otpRefs.current[0]?.focus(), 100);
       } else {
-        setError(data.error || 'Failed to send verification code');
+        setError(data.error || t.failedOtp);
       }
     } catch {
-      setError('Failed to send verification code. Please try again.');
+      setError(t.failedOtp);
     } finally {
       setLoading(false);
     }
@@ -456,7 +455,7 @@ export default function WebChatPage() {
         if (data.session.isNew) {
           setMessages([{
             id: 'welcome',
-            content: "Hey! 💛 I'm Dada Bora — think of me as that big sister energy. I'm really glad you're here. So tell me, how's your day going?",
+            content: t.welcomeMessage,
             isFromUser: false,
             timestamp: new Date().toISOString(),
           }]);
@@ -464,10 +463,10 @@ export default function WebChatPage() {
           loadChatHistory(data.session.sessionId);
         }
       } else {
-        setError(data.error || 'Invalid verification code');
+        setError(data.error || t.invalidCode);
       }
     } catch {
-      setError('Verification failed. Please try again.');
+      setError(t.verificationFailed);
     } finally {
       setLoading(false);
     }
@@ -498,6 +497,7 @@ export default function WebChatPage() {
         body: JSON.stringify({
           sessionId: session.sessionId,
           message: messageContent,
+          language: lang,
         }),
       });
 
@@ -524,13 +524,13 @@ export default function WebChatPage() {
           localStorage.removeItem('dada_session');
           setSession(null);
           setView('phone');
-          setError('Your session has expired. Please verify your phone number again.');
+          setError(t.sessionExpired);
         } else {
           setError(data.error);
         }
       }
     } catch {
-      setError('Failed to send message. Please try again.');
+      setError(t.failedSend);
     } finally {
       setLoading(false);
     }
@@ -601,7 +601,7 @@ export default function WebChatPage() {
                 {chatInfo.anonymousName}{chatInfo.location?.country ? ` • ${chatInfo.location.country}` : ''}
               </p>
             ) : (
-              <p className="text-[11px] sm:text-xs text-gold">Your Big Sister 💛</p>
+              <p className="text-[11px] sm:text-xs text-gold">{t.tagline}</p>
             )}
           </div>
         </div>
@@ -611,14 +611,14 @@ export default function WebChatPage() {
               onClick={handleLogout}
               className="text-xs sm:text-sm text-white/80 hover:text-white transition-colors px-2.5 py-1 rounded-full border border-white/30 hover:border-white/60 hidden sm:block"
             >
-              End Chat
+              {t.endChat}
             </button>
           )}
           {session && (
             <button
               onClick={handleLogout}
               className="p-1.5 text-white/70 hover:text-white sm:hidden"
-              title="End Chat"
+              title={t.endChat}
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
@@ -644,15 +644,15 @@ export default function WebChatPage() {
                     className="w-full h-full object-cover"
                   />
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-playfair font-bold text-warm-brown mb-1.5">Hey, Queen! 👋</h2>
+                <h2 className="text-2xl sm:text-3xl font-playfair font-bold text-warm-brown mb-1.5">{t.greeting}</h2>
                 <p className="text-gray-600 text-sm sm:text-base">
-                  I&apos;m Dada Bora, your big sister. Let&apos;s connect so I can remember our conversations.
+                  {t.phoneSubtitle}
                 </p>
               </div>
 
               <div className="space-y-4">
                 <label className="block text-sm font-medium text-earth">
-                  Your Phone Number
+                  {t.phoneLabel}
                 </label>
                 <PhoneInput
                   international
@@ -671,11 +671,11 @@ export default function WebChatPage() {
                   disabled={loading || !phoneNumber || phoneNumber.length < 8}
                   className="w-full py-3.5 bg-warm-brown text-white rounded-full font-semibold hover:bg-amber-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
                 >
-                  {loading ? 'Sending...' : 'Continue 💛'}
+                  {loading ? t.sending : t.continueBtn}
                 </button>
 
                 <p className="text-xs text-center text-gray-500">
-                  We&apos;ll send you a verification code. Your conversations are private and secure.
+                  {t.phoneDisclaimer}
                 </p>
               </div>
             </div>
@@ -690,9 +690,9 @@ export default function WebChatPage() {
                 <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gold/20 flex items-center justify-center text-4xl mx-auto mb-3">
                   📱
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-playfair font-bold text-warm-brown mb-1.5">Check Your Phone</h2>
+                <h2 className="text-2xl sm:text-3xl font-playfair font-bold text-warm-brown mb-1.5">{t.checkPhone}</h2>
                 <p className="text-gray-600 text-sm sm:text-base">
-                  Enter the 6-digit code sent to<br />
+                  {t.otpSubtitle}<br />
                   <span className="font-semibold text-earth">{phoneNumber}</span>
                 </p>
               </div>
@@ -723,14 +723,14 @@ export default function WebChatPage() {
                   disabled={loading || otpCode.some(d => !d)}
                   className="w-full py-3.5 bg-warm-brown text-white rounded-full font-semibold hover:bg-amber-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
                 >
-                  {loading ? 'Verifying...' : 'Verify & Start Chat 💛'}
+                  {loading ? t.verifying : t.verifyBtn}
                 </button>
 
                 <button
                   onClick={() => setView('phone')}
                   className="w-full text-sm text-earth hover:text-warm-brown transition-colors"
                 >
-                  ← Use a different number
+                  {t.differentNumber}
                 </button>
               </div>
             </div>
@@ -757,7 +757,7 @@ export default function WebChatPage() {
                 </div>
               )}
 
-              <div className="space-y-1.5 sm:space-y-2">
+              <div className="space-y-3 sm:space-y-4">
                 {messages.map((message) => (
                   <div
                     key={message.id}
@@ -810,7 +810,7 @@ export default function WebChatPage() {
                               }
                             }}
                             className="text-gold hover:text-warm-brown transition-colors -mr-0.5"
-                            title="Play voice"
+                            title={t.playVoice}
                           >
                             {isPlaying ? (
                               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
@@ -872,12 +872,12 @@ export default function WebChatPage() {
                     <div className="w-0.5 h-3 bg-red-400 rounded-full animate-pulse" style={{ animationDelay: '400ms' }} />
                     <div className="w-0.5 h-5 bg-red-400 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
                   </div>
-                  <span className="text-xs text-red-600 font-medium">Listening...</span>
+                  <span className="text-xs text-red-600 font-medium">{t.listening}</span>
                   <button 
                     onClick={stopRecording} 
                     className="ml-1 px-2 py-0.5 text-[11px] font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-full transition-colors"
                   >
-                    Cancel
+                    {t.cancelBtn}
                   </button>
                 </div>
               )}
@@ -892,12 +892,12 @@ export default function WebChatPage() {
                     <div className="w-0.5 h-5 bg-warm-brown rounded-full animate-pulse" style={{ animationDelay: '100ms' }} />
                     <div className="w-0.5 h-2.5 bg-warm-brown rounded-full animate-pulse" style={{ animationDelay: '250ms' }} />
                   </div>
-                  <span className="text-xs text-warm-brown font-medium">Dada is speaking...</span>
+                  <span className="text-xs text-warm-brown font-medium">{t.dadaSpeaking}</span>
                   <button 
                     onClick={stopAudio} 
                     className="ml-1 px-2 py-0.5 text-[11px] font-medium text-warm-brown bg-gold/20 hover:bg-gold/30 rounded-full transition-colors"
                   >
-                    Stop
+                    {t.stopBtn}
                   </button>
                 </div>
               )}
@@ -915,7 +915,7 @@ export default function WebChatPage() {
                       e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
                     }}
                     onKeyDown={handleKeyPress}
-                    placeholder="Message..."
+                    placeholder={t.messagePlaceholder}
                     className="flex-1 bg-transparent border-none outline-none resize-none text-[14px] sm:text-[15px] leading-snug py-1.5 max-h-[100px] placeholder:text-gray-400"
                     rows={1}
                     style={{ height: 'auto' }}
@@ -932,7 +932,7 @@ export default function WebChatPage() {
                         ? 'bg-red-500 text-white shadow-lg shadow-red-200 scale-105'
                         : 'bg-warm-brown text-white hover:bg-amber-900 active:scale-95 disabled:opacity-50 shadow-md'
                     }`}
-                    title={isRecording ? 'Stop listening' : 'Talk to Dada'}
+                    title={isRecording ? t.stopListening : t.talkToDada}
                   >
                     {isRecording ? (
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
@@ -979,7 +979,7 @@ export default function WebChatPage() {
       {view !== 'chat' && (
         <footer className="text-center py-3 px-4 flex-shrink-0">
           <p className="text-xs sm:text-sm text-earth">
-            Powered by <span className="font-playfair font-semibold text-warm-brown">Dada Bora</span> 💛
+            {t.poweredBy} <span className="font-playfair font-semibold text-warm-brown">Dada Bora</span> 💛
           </p>
         </footer>
       )}

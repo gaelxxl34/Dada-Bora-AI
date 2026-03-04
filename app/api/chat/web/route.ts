@@ -35,6 +35,7 @@ import {
   getProductContext, 
   isAppropriateForRecommendation 
 } from '@/lib/product-recommendations';
+import { getLanguageInstruction, type ChatLanguage } from '@/lib/chat-translations';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +51,8 @@ async function getAIResponse(
   chatId: string,
   isCrisis: boolean,
   crisisContext: string,
-  optimizedProfileContext: string
+  optimizedProfileContext: string,
+  language: ChatLanguage = 'en'
 ): Promise<{ response: string; tokensUsed: number }> {
   try {
     const configDoc = await adminDb.collection('integrations').doc('chatbot').get();
@@ -87,7 +89,7 @@ async function getAIResponse(
       knowledgeBaseContent,
       productContext,
       crisisContext
-    );
+    ) + getLanguageInstruction(language);
 
     if (provider === 'openai' && openaiApiKey) {
       const messages = [
@@ -172,7 +174,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { sessionId, message } = body;
+    const { sessionId, message, language } = body;
 
     // Validate session
     if (!sessionId) {
@@ -335,7 +337,8 @@ Your role: Provide immediate emotional support, stay calm, show you care.
       chatId,
       isCrisis,
       crisisContext,
-      optimizedContext
+      optimizedContext,
+      language || 'en'
     );
 
     if (tokensUsed > 0) {
