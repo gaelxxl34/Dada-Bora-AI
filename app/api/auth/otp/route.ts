@@ -1,18 +1,18 @@
 /**
  * API Routes for OTP Verification
- * Handles sending and verifying OTP codes for web chat authentication
+ * Handles Firebase Phone Auth verification and session management for web chat
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { sendOTP, verifyOTP, validateSession, endSession } from '@/lib/otp-verification';
+import { validateSession, endSession, createSessionFromFirebaseAuth } from '@/lib/otp-verification';
 import { applyRateLimit } from '@/lib/auth-middleware';
-import { getLocationFromPhone } from '@/lib/phone-location';
+import { adminAuth } from '@/lib/firebase-admin';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/auth/otp
- * Actions: send, verify, validate, logout
+ * Actions: firebase-verify, validate, logout
  */
 export async function POST(request: NextRequest) {
   try {
@@ -23,83 +23,50 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, phoneNumber, code, sessionId } = body;
+    const { action, idToken, sessionId } = body;
 
     switch (action) {
-      case 'send': {
-        // Send OTP to phone number
-        if (!phoneNumber) {
+      case 'firebase-verify': {
+        // Verify Firebase ID token and create chat session
+        if (!idToken) {
           return NextResponse.json(
-            { error: 'Phone number is required' },
+            { error: 'ID token is required' },
             { status: 400 }
           );
         }
 
-        // Validate phone number format
-        const normalizedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
-        if (!/^\+[1-9]\d{6,14}$/.test(normalizedPhone)) {
+        try {
+          // Verify the Firebase ID token with Admin SDK
+          const decodedToken = await adminAuth.verifyIdToken(idToken);
+          const phoneNumber = decodedToken.phone_number;
+
+          if (!phoneNumber) {
+            return NextResponse.json(
+              { error: 'Phone number not found in token' },
+              { status: 400 }
+            );
+          }
+
+          // Create or load chat session
+          const result = await createSessionFromFirebaseAuth(phoneNumber);
+
+          return NextResponse.json({
+            success: true,
+            session: {
+              sessionId: result.session.sessionId,
+              chatId: result.session.chatId,
+              anonymousName: result.anonymousName,
+              isNew: result.isNew,
+              expiresAt: result.session.expiresAt.toDate().toISOString(),
+            },
+          });
+        } catch (tokenError) {
+          console.error('Firebase token verification failed:', tokenError);
           return NextResponse.json(
-            { error: 'Invalid phone number format. Please include country code (e.g., +1234567890)' },
-            { status: 400 }
+            { error: 'Invalid authentication token' },
+            { status: 401 }
           );
         }
-
-        // Get location info for display
-        const locationInfo = getLocationFromPhone(normalizedPhone);
-
-        const result = await sendOTP(normalizedPhone);
-        
-        if (!result.success) {
-          return NextResponse.json(
-            { error: result.error, retryAfter: result.retryAfter },
-            { status: result.retryAfter ? 429 : 400 }
-          );
-        }
-
-        return NextResponse.json({
-          success: true,
-          message: 'Verification code sent',
-          location: locationInfo ? {
-            country: locationInfo.countryName,
-            region: locationInfo.region,
-          } : null,
-        });
-      }
-
-      case 'verify': {
-        // Verify OTP code
-        if (!phoneNumber || !code) {
-          return NextResponse.json(
-            { error: 'Phone number and code are required' },
-            { status: 400 }
-          );
-        }
-
-        if (!/^\d{6}$/.test(code)) {
-          return NextResponse.json(
-            { error: 'Invalid code format. Please enter 6 digits.' },
-            { status: 400 }
-          );
-        }
-
-        const result = await verifyOTP(phoneNumber, code);
-
-        if (!result.success) {
-          return NextResponse.json(
-            { error: result.error },
-            { status: 400 }
-          );
-        }
-
-        // Return session info (but not the full phone number for security)
-        return NextResponse.json({
-          success: true,
-          session: {
-            sessionId: result.session!.sessionId,
-            chatId: result.session!.chatId,
-            expiresAt: result.session!.expiresAt.toDate().toISOString(),
-          },
-        });
       }
 
       case 'validate': {

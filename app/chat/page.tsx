@@ -5,6 +5,8 @@ import Image from 'next/image';
 import PhoneInput from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 import { chatTranslations, detectBrowserLanguage, type ChatLanguage } from '@/lib/chat-translations';
+import { auth } from '@/lib/firebase';
+import { signInWithPhoneNumber, RecaptchaVerifier, ConfirmationResult } from 'firebase/auth';
 
 // Types
 interface Message {
@@ -48,12 +50,17 @@ export default function WebChatPage() {
   const [lang, setLang] = useState<ChatLanguage>('en');
   const t = useMemo(() => chatTranslations[lang], [lang]);
   
+  // reCAPTCHA state
+  const [recaptchaSolved, setRecaptchaSolved] = useState(false);
+  
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const confirmationResultRef = useRef<ConfirmationResult | null>(null);
+  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
   // Scroll to bottom of messages
   const scrollToBottom = useCallback(() => {
@@ -68,6 +75,36 @@ export default function WebChatPage() {
   useEffect(() => {
     setLang(detectBrowserLanguage());
   }, []);
+
+  // Setup visible reCAPTCHA widget when phone view is shown
+  useEffect(() => {
+    if (view !== 'phone') return;
+    // Small delay to ensure the DOM container is rendered
+    const timer = setTimeout(() => {
+      const container = document.getElementById('recaptcha-container');
+      if (!container || recaptchaVerifierRef.current) return;
+      
+      try {
+        const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          size: 'normal',
+          callback: () => {
+            setRecaptchaSolved(true);
+          },
+          'expired-callback': () => {
+            setRecaptchaSolved(false);
+          }
+        });
+        recaptchaVerifierRef.current = verifier;
+        verifier.render().catch((err: unknown) => {
+          console.warn('reCAPTCHA render failed:', err);
+        });
+      } catch (err) {
+        console.warn('reCAPTCHA setup failed:', err);
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [view]);
 
   // Check if browser supports speech recognition & mic permission
   useEffect(() => {
@@ -366,32 +403,50 @@ export default function WebChatPage() {
     }
   };
 
-  // Send OTP
+  // Send OTP via Firebase Phone Auth
   const handleSendOTP = async () => {
     setError('');
     setLoading(true);
 
     try {
-      const response = await fetch('/api/auth/otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'send',
-          phoneNumber: phoneNumber,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setView('otp');
-        setOtpCode(['', '', '', '', '', '']);
-        setTimeout(() => otpRefs.current[0]?.focus(), 100);
-      } else {
-        setError(data.error || t.failedOtp);
+      if (!recaptchaVerifierRef.current) {
+        setError(lang === 'fr' ? 'Veuillez compléter la vérification reCAPTCHA.' : 'Please complete the reCAPTCHA verification.');
+        setLoading(false);
+        return;
       }
-    } catch {
-      setError(t.failedOtp);
+
+      const confirmationResult = await signInWithPhoneNumber(
+        auth,
+        phoneNumber || '',
+        recaptchaVerifierRef.current
+      );
+      
+      confirmationResultRef.current = confirmationResult;
+      setView('otp');
+      setOtpCode(['', '', '', '', '', '']);
+      setTimeout(() => otpRefs.current[0]?.focus(), 100);
+    } catch (err: unknown) {
+      console.error('Firebase Phone Auth error:', err);
+      const firebaseError = err as { code?: string; message?: string };
+      if (firebaseError.code === 'auth/invalid-phone-number') {
+        setError(lang === 'fr' ? 'Numéro de téléphone invalide.' : 'Invalid phone number format.');
+      } else if (firebaseError.code === 'auth/too-many-requests') {
+        setError(lang === 'fr' ? 'Trop de tentatives. Réessaie plus tard.' : 'Too many attempts. Please try again later.');
+      } else if (firebaseError.code === 'auth/captcha-check-failed') {
+        setError(lang === 'fr' ? 'Vérification reCAPTCHA échouée. Recharge la page.' : 'reCAPTCHA verification failed. Please reload the page.');
+      } else if (firebaseError.code === 'auth/invalid-app-credential') {
+        setError(lang === 'fr' 
+          ? 'Erreur de configuration Firebase. Vérifie que l\'API reCAPTCHA Enterprise est activée.' 
+          : 'Firebase configuration error. Please ensure reCAPTCHA Enterprise API is enabled in Google Cloud Console.');
+      } else {
+        setError(t.failedOtp);
+      }
+      // Reset reCAPTCHA on error so it can be retried
+      if (recaptchaVerifierRef.current) {
+        try { recaptchaVerifierRef.current.clear(); } catch { /* ignore */ }
+        recaptchaVerifierRef.current = null;
+      }
+      setRecaptchaSolved(false);
     } finally {
       setLoading(false);
     }
@@ -417,7 +472,7 @@ export default function WebChatPage() {
     }
   };
 
-  // Verify OTP
+  // Verify OTP via Firebase, then create server session
   const handleVerifyOTP = async () => {
     setError('');
     setLoading(true);
@@ -425,13 +480,23 @@ export default function WebChatPage() {
     const code = otpCode.join('');
 
     try {
+      if (!confirmationResultRef.current) {
+        setError(t.verificationFailed);
+        setLoading(false);
+        return;
+      }
+
+      // Step 1: Verify code with Firebase on the client
+      const userCredential = await confirmationResultRef.current.confirm(code);
+      const idToken = await userCredential.user.getIdToken();
+
+      // Step 2: Send Firebase ID token to our server to create a chat session
       const response = await fetch('/api/auth/otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'verify',
-          phoneNumber: phoneNumber,
-          code,
+          action: 'firebase-verify',
+          idToken,
         }),
       });
 
@@ -465,8 +530,16 @@ export default function WebChatPage() {
       } else {
         setError(data.error || t.invalidCode);
       }
-    } catch {
-      setError(t.verificationFailed);
+    } catch (err: unknown) {
+      console.error('OTP verification error:', err);
+      const firebaseError = err as { code?: string };
+      if (firebaseError.code === 'auth/invalid-verification-code') {
+        setError(t.invalidCode);
+      } else if (firebaseError.code === 'auth/code-expired') {
+        setError(lang === 'fr' ? 'Code expiré. Demande un nouveau code.' : 'Code expired. Please request a new one.');
+      } else {
+        setError(t.verificationFailed);
+      }
     } finally {
       setLoading(false);
     }
@@ -575,6 +648,8 @@ export default function WebChatPage() {
 
   return (
     <div className="h-[100dvh] bg-cream-50 flex flex-col overflow-hidden">
+      {/* reCAPTCHA container moved into phone form */}
+      
       {/* Header — compact on mobile like WhatsApp */}
       <header className="bg-warm-brown text-white px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between flex-shrink-0 z-10 shadow-md">
         <div className="flex items-center gap-2.5">
@@ -666,9 +741,14 @@ export default function WebChatPage() {
                   <p className="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{error}</p>
                 )}
 
+                {/* reCAPTCHA checkbox */}
+                <div className="flex justify-center">
+                  <div id="recaptcha-container" />
+                </div>
+
                 <button
                   onClick={handleSendOTP}
-                  disabled={loading || !phoneNumber || phoneNumber.length < 8}
+                  disabled={loading || !phoneNumber || phoneNumber.length < 8 || !recaptchaSolved}
                   className="w-full py-3.5 bg-warm-brown text-white rounded-full font-semibold hover:bg-amber-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
                 >
                   {loading ? t.sending : t.continueBtn}

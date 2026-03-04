@@ -1,17 +1,17 @@
 /**
  * OTP Verification System for Dada Bora Web Chat
- * Uses Twilio Verify API for SMS OTP
+ * Uses Firebase Phone Auth for SMS verification (free up to 10K/month)
+ * Session management handled via Firestore
  * 
  * Flow:
  * 1. User enters phone number
- * 2. We send OTP via SMS
- * 3. User enters OTP
- * 4. We verify and create/load their profile
+ * 2. Firebase Phone Auth sends OTP via SMS (client-side)
+ * 3. User enters OTP, verified by Firebase client SDK
+ * 4. Server receives Firebase ID token, verifies it, creates chat session
  */
 
 import { adminDb } from './firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
-import twilio from 'twilio';
 
 // Session types
 export interface WebChatSession {
@@ -28,191 +28,39 @@ export interface WebChatSession {
   ipAddress?: string;
 }
 
-// Rate limiting for OTP requests
-const otpRateLimits = new Map<string, { count: number; resetAt: number }>();
-
 /**
- * Check if phone number has exceeded OTP request limit
- * Max 3 requests per 10 minutes
+ * Create a web chat session from Firebase Phone Auth
+ * Called after Firebase ID token is verified on the server
  */
-export function checkOTPRateLimit(phoneNumber: string): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-  const limit = otpRateLimits.get(phoneNumber);
-  
-  if (!limit || limit.resetAt < now) {
-    otpRateLimits.set(phoneNumber, { count: 1, resetAt: now + 10 * 60 * 1000 });
-    return { allowed: true };
-  }
-  
-  if (limit.count >= 3) {
-    return { allowed: false, retryAfter: Math.ceil((limit.resetAt - now) / 1000) };
-  }
-  
-  limit.count++;
-  return { allowed: true };
-}
-
-/**
- * Get Twilio client with credentials from Firestore
- */
-async function getTwilioClient(): Promise<{ client: twilio.Twilio; verifyServiceSid: string } | null> {
-  try {
-    const configDoc = await adminDb.collection('integrations').doc('whatsapp').get();
-    const config = configDoc.data();
-    
-    if (!config?.accountSid || !config?.authToken) {
-      console.error('Twilio credentials not configured');
-      return null;
-    }
-    
-    const client = twilio(config.accountSid, config.authToken);
-    
-    // Get or create Verify Service
-    let verifyServiceSid = config.verifyServiceSid;
-    
-    if (!verifyServiceSid) {
-      // Create a new Verify Service
-      const service = await client.verify.v2.services.create({
-        friendlyName: 'Dada Bora Web Chat',
-        codeLength: 6,
-      });
-      verifyServiceSid = service.sid;
-      
-      // Save for future use
-      await adminDb.collection('integrations').doc('whatsapp').update({
-        verifyServiceSid: service.sid,
-      });
-    }
-    
-    return { client, verifyServiceSid };
-  } catch (error) {
-    console.error('Error getting Twilio client:', error);
-    return null;
-  }
-}
-
-/**
- * Send OTP to phone number
- */
-export async function sendOTP(phoneNumber: string): Promise<{
-  success: boolean;
-  error?: string;
-  retryAfter?: number;
-}> {
-  // Check rate limit
-  const rateLimit = checkOTPRateLimit(phoneNumber);
-  if (!rateLimit.allowed) {
-    return {
-      success: false,
-      error: 'Too many OTP requests. Please try again later.',
-      retryAfter: rateLimit.retryAfter,
-    };
-  }
-  
-  // Normalize phone number
-  const normalizedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
-  
-  try {
-    const twilioSetup = await getTwilioClient();
-    if (!twilioSetup) {
-      return { success: false, error: 'SMS service not configured' };
-    }
-    
-    const { client, verifyServiceSid } = twilioSetup;
-    
-    // Send verification code
-    await client.verify.v2
-      .services(verifyServiceSid)
-      .verifications.create({
-        to: normalizedPhone,
-        channel: 'sms',
-      });
-    
-    console.log(`OTP sent to ${normalizedPhone.substring(0, 6)}...`);
-    
-    // Log the attempt
-    await adminDb.collection('otpLogs').add({
-      phoneHash: hashPhone(normalizedPhone),
-      action: 'sent',
-      timestamp: Timestamp.now(),
-      success: true,
-    });
-    
-    return { success: true };
-  } catch (error: any) {
-    console.error('Error sending OTP:', error);
-    
-    // Handle specific Twilio errors
-    if (error.code === 60200) {
-      return { success: false, error: 'Invalid phone number format' };
-    }
-    if (error.code === 60203) {
-      return { success: false, error: 'Too many attempts. Please try again in 10 minutes.' };
-    }
-    
-    return { success: false, error: 'Failed to send verification code' };
-  }
-}
-
-/**
- * Verify OTP code
- */
-export async function verifyOTP(phoneNumber: string, code: string): Promise<{
-  success: boolean;
-  error?: string;
-  session?: WebChatSession;
+export async function createSessionFromFirebaseAuth(phoneNumber: string): Promise<{
+  session: WebChatSession;
+  anonymousName: string;
+  isNew: boolean;
 }> {
   const normalizedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+  const session = await createWebChatSession(normalizedPhone);
   
-  try {
-    const twilioSetup = await getTwilioClient();
-    if (!twilioSetup) {
-      return { success: false, error: 'SMS service not configured' };
-    }
-    
-    const { client, verifyServiceSid } = twilioSetup;
-    
-    // Verify the code
-    const verification = await client.verify.v2
-      .services(verifyServiceSid)
-      .verificationChecks.create({
-        to: normalizedPhone,
-        code: code,
-      });
-    
-    if (verification.status !== 'approved') {
-      // Log failed attempt
-      await adminDb.collection('otpLogs').add({
-        phoneHash: hashPhone(normalizedPhone),
-        action: 'verify_failed',
-        timestamp: Timestamp.now(),
-        success: false,
-      });
-      
-      return { success: false, error: 'Invalid verification code' };
-    }
-    
-    // Code is valid - create session
-    const session = await createWebChatSession(normalizedPhone);
-    
-    // Log success
-    await adminDb.collection('otpLogs').add({
-      phoneHash: hashPhone(normalizedPhone),
-      action: 'verified',
-      timestamp: Timestamp.now(),
-      success: true,
-    });
-    
-    return { success: true, session };
-  } catch (error: any) {
-    console.error('Error verifying OTP:', error);
-    
-    if (error.code === 60202) {
-      return { success: false, error: 'Verification code expired. Please request a new one.' };
-    }
-    
-    return { success: false, error: 'Verification failed' };
-  }
+  // Fetch the chat to get anonymousName and check if new
+  const chatDoc = await adminDb.collection('chats').doc(session.chatId).get();
+  const chatData = chatDoc.data();
+  
+  // Check if this is a new user (created within the last 10 seconds)
+  const isNew = chatData?.createdAt && 
+    (Date.now() - chatData.createdAt.toDate().getTime()) < 10000;
+
+  // Log the auth event
+  await adminDb.collection('otpLogs').add({
+    phoneHash: hashPhone(normalizedPhone),
+    action: 'firebase_verified',
+    timestamp: Timestamp.now(),
+    success: true,
+  });
+
+  return {
+    session,
+    anonymousName: chatData?.anonymousName || 'Anonymous',
+    isNew: !!isNew,
+  };
 }
 
 /**
