@@ -45,3 +45,9 @@ next-env.d.ts
 # IDE
 .vscode/
 .idea/
+
+# Knowledge Base Data (already uploaded to Firebase)
+dada_bora_knowledge_base.json
+
+# Scripts (contain sensitive operations)
+scripts/
