@@ -19,9 +19,11 @@ import { auth, db } from '../lib/firebase';
 interface UserProfile {
   uid: string;
   email: string | null;
-  role: 'admin' | 'partner' | null;
+  role: 'super_admin' | 'admin' | 'partner' | 'agent' | 'user' | null;
   displayName?: string;
   createdAt?: Date;
+  businessName?: string;
+  phone?: string;
 }
 
 interface AuthContextType {
@@ -56,7 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               role: data.role || null,
-              displayName: data.displayName,
+              // Support both 'name' and 'displayName' fields
+              displayName: data.name || data.displayName || firebaseUser.displayName || undefined,
               createdAt: data.createdAt?.toDate(),
             });
           } else {
@@ -64,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               role: null,
+              displayName: firebaseUser.displayName || undefined,
             });
           }
         } catch (err) {

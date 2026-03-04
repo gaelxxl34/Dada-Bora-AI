@@ -7,6 +7,7 @@ import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiPost } from '@/lib/api-client';
+import { DADA_VOICE_OPTIONS, DEFAULT_VOICE_ID } from '@/lib/elevenlabs';
 
 interface ChatbotConfig {
   provider: 'openai' | 'anthropic';
@@ -21,22 +22,52 @@ interface ChatbotConfig {
   updatedBy?: string;
 }
 
+interface VoiceConfig {
+  enabled: boolean;
+  elevenLabsApiKey: string;
+  voiceId: string;
+  stability: number;
+  similarityBoost: number;
+  style: number;
+  autoPlayResponses: boolean;
+}
+
 interface TestMessage {
   role: 'user' | 'assistant';
   content: string;
 }
 
-const DEFAULT_PROMPT = `You are Dada Bora, a compassionate and knowledgeable AI assistant specializing in maternal and child health in Kenya. Your mission is to provide caring, culturally sensitive support to mothers, expectant parents, and families.
+const DEFAULT_PROMPT = `You are DADA BORA — "Big Sister" in Swahili. You are the trusted, wise, warm older sister that every Black woman deserves but doesn't always have access to.
 
-Key characteristics:
-- Warm, empathetic, and respectful tone
-- Culturally aware of Kenyan context and traditions
-- Evidence-based health information
-- Encourage seeking professional medical care when needed
-- Supportive of both modern medicine and respectful cultural practices
-- Available in English and Swahili
+WHO YOU ARE:
+You grew up watching your aunties, mothers, grandmothers, and the women in your community support each other through everything — births and heartbreaks, triumphs and trials. You carry that tradition of sisterhood forward. You understand the unique experiences of Black women across the diaspora — from Nairobi to Lagos, London to New York, Kingston to Paris.
 
-Always prioritize safety and encourage users to consult healthcare professionals for medical concerns. Provide practical, actionable advice while being sensitive to local resources and constraints.`;
+YOUR PERSONALITY:
+- Warm and nurturing, never cold or clinical
+- Wise but accessible — you don't lecture, you share
+- Cultural pride — you embrace African, Caribbean, and diaspora heritage
+- Real talk — you're honest, even when it's hard
+- Joyful — you find humor and light even in serious conversations
+- Protective — you care deeply about women's wellbeing
+
+YOUR VOICE:
+- Use terms of endearment SPARINGLY — "dada", "love", "mama", "girl". Do NOT say "sis", "sister", or "queen" in every message. Talk like a real person.
+- Share wisdom through stories and relatability, not lectures
+- Show genuine curiosity about HER life — ask about her day, her week, what she's been up to
+- NEVER say "How can I assist you?" or "How can I help you?" — instead ask natural questions like "So what's been going on?" or "Tell me about your day"
+- Be direct but gentle when addressing hard topics
+- Use emojis sparingly but meaningfully (💛🌸✨)
+
+WHAT YOU NEVER DO:
+- Sound like a generic chatbot or customer service agent
+- Say "How can I assist you?" or "What can I do for you?" — real sisters don't talk like that  
+- Call her "sis" or "sister" or "queen" in every message
+- Give medical diagnoses (always encourage professional care)
+- Dismiss or minimize feelings
+- Judge lifestyle choices
+- Ignore signs of crisis or danger
+
+Always prioritize safety and encourage users to consult healthcare professionals for medical concerns. When you detect distress, respond with compassion first before offering solutions.`;
 
 export default function ChatbotSettingsPage() {
   const router = useRouter();
@@ -45,6 +76,16 @@ export default function ChatbotSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [showOpenAIKey, setShowOpenAIKey] = useState(false);
   const [showAnthropicKey, setShowAnthropicKey] = useState(false);
+  const [showElevenLabsKey, setShowElevenLabsKey] = useState(false);
+  const [voiceConfig, setVoiceConfig] = useState<VoiceConfig>({
+    enabled: false,
+    elevenLabsApiKey: '',
+    voiceId: DEFAULT_VOICE_ID,
+    stability: 0.5,
+    similarityBoost: 0.75,
+    style: 0.3,
+    autoPlayResponses: true,
+  });
   const [config, setConfig] = useState<ChatbotConfig>({
     provider: 'openai',
     openaiApiKey: '',
@@ -84,6 +125,13 @@ export default function ChatbotSettingsPage() {
           const data = docSnap.data() as ChatbotConfig;
           setConfig(data);
         }
+
+        // Load voice config
+        const voiceDocRef = doc(db, 'config', 'voice');
+        const voiceDocSnap = await getDoc(voiceDocRef);
+        if (voiceDocSnap.exists()) {
+          setVoiceConfig(prev => ({ ...prev, ...voiceDocSnap.data() as Partial<VoiceConfig> }));
+        }
       } catch (error) {
         console.error('Error loading chatbot config:', error);
       } finally {
@@ -104,6 +152,14 @@ export default function ChatbotSettingsPage() {
       const docRef = doc(db, 'integrations', 'chatbot');
       await setDoc(docRef, {
         ...config,
+        lastUpdated: Timestamp.now(),
+        updatedBy: user.email,
+      });
+
+      // Save voice config separately
+      const voiceDocRef = doc(db, 'config', 'voice');
+      await setDoc(voiceDocRef, {
+        ...voiceConfig,
         lastUpdated: Timestamp.now(),
         updatedBy: user.email,
       });
@@ -433,6 +489,170 @@ export default function ChatbotSettingsPage() {
                   Maximum length of AI responses. ~1 token ≈ 0.75 words. Recommended: 500-1500 tokens.
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* Voice Configuration */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <i className="ri-mic-line text-warm-brown" />
+              Voice (ElevenLabs TTS)
+            </h3>
+            
+            <div className="space-y-4">
+              {/* Enable Voice */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Enable Voice</p>
+                  <p className="text-xs text-gray-500">Let users hear Dada&apos;s responses spoken aloud</p>
+                </div>
+                <button
+                  onClick={() => setVoiceConfig({ ...voiceConfig, enabled: !voiceConfig.enabled })}
+                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                    voiceConfig.enabled ? 'bg-green-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                      voiceConfig.enabled ? 'translate-x-7' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {voiceConfig.enabled && (
+                <>
+                  {/* ElevenLabs API Key */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      ElevenLabs API Key
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showElevenLabsKey ? 'text' : 'password'}
+                        value={voiceConfig.elevenLabsApiKey}
+                        onChange={(e) => setVoiceConfig({ ...voiceConfig, elevenLabsApiKey: e.target.value })}
+                        placeholder="Enter your ElevenLabs API key"
+                        className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-brown focus:border-transparent"
+                      />
+                      <button
+                        onClick={() => setShowElevenLabsKey(!showElevenLabsKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <i className={showElevenLabsKey ? 'ri-eye-off-line' : 'ri-eye-line'} />
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Get your API key at{' '}
+                      <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer" className="text-warm-brown hover:underline">
+                        elevenlabs.io
+                      </a>
+                    </p>
+                  </div>
+
+                  {/* Voice Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Dada&apos;s Voice
+                    </label>
+                    <select
+                      value={voiceConfig.voiceId}
+                      onChange={(e) => setVoiceConfig({ ...voiceConfig, voiceId: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-brown focus:border-transparent"
+                    >
+                      {DADA_VOICE_OPTIONS.map((voice) => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.name} — {voice.description}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Choose a voice that feels right for Dada. You can also use a custom voice ID from ElevenLabs.
+                    </p>
+                  </div>
+
+                  {/* Voice Settings */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-sm font-medium text-gray-700">Stability</label>
+                        <span className="text-xs font-semibold text-warm-brown">{voiceConfig.stability.toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={voiceConfig.stability}
+                        onChange={(e) => setVoiceConfig({ ...voiceConfig, stability: parseFloat(e.target.value) })}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Expressive</span>
+                        <span>Stable</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-sm font-medium text-gray-700">Clarity</label>
+                        <span className="text-xs font-semibold text-warm-brown">{voiceConfig.similarityBoost.toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={voiceConfig.similarityBoost}
+                        onChange={(e) => setVoiceConfig({ ...voiceConfig, similarityBoost: parseFloat(e.target.value) })}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Natural</span>
+                        <span>Clear</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-sm font-medium text-gray-700">Style</label>
+                        <span className="text-xs font-semibold text-warm-brown">{voiceConfig.style.toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={voiceConfig.style}
+                        onChange={(e) => setVoiceConfig({ ...voiceConfig, style: parseFloat(e.target.value) })}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Neutral</span>
+                        <span>Expressive</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Auto-play setting */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Auto-play responses</p>
+                      <p className="text-xs text-gray-500">Automatically speak Dada&apos;s replies in voice mode</p>
+                    </div>
+                    <button
+                      onClick={() => setVoiceConfig({ ...voiceConfig, autoPlayResponses: !voiceConfig.autoPlayResponses })}
+                      className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                        voiceConfig.autoPlayResponses ? 'bg-green-600' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                          voiceConfig.autoPlayResponses ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

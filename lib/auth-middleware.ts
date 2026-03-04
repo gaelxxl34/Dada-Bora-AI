@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth } from './firebase-admin';
+import { adminAuth, adminDb } from './firebase-admin';
 
 export interface AuthenticatedUser {
   uid: string;
@@ -15,6 +15,7 @@ export interface AuthenticatedUser {
 /**
  * Verify Firebase Auth token from request headers
  * Returns the authenticated user or null if not authenticated
+ * Checks custom claims first, then falls back to Firestore 'users' collection
  */
 export async function verifyAuthToken(request: NextRequest): Promise<AuthenticatedUser | null> {
   try {
@@ -33,10 +34,25 @@ export async function verifyAuthToken(request: NextRequest): Promise<Authenticat
     // Verify the Firebase ID token
     const decodedToken = await adminAuth.verifyIdToken(token);
     
+    // Try custom claims first
+    let role = decodedToken.role as string | undefined;
+
+    // If no role in custom claims, fetch from Firestore 'users' collection
+    if (!role) {
+      try {
+        const userDoc = await adminDb.collection('users').doc(decodedToken.uid).get();
+        if (userDoc.exists) {
+          role = userDoc.data()?.role as string | undefined;
+        }
+      } catch (err) {
+        console.error('Error fetching user role from Firestore:', err);
+      }
+    }
+
     return {
       uid: decodedToken.uid,
       email: decodedToken.email,
-      role: decodedToken.role as string | undefined,
+      role,
     };
   } catch (error) {
     console.error('Error verifying auth token:', error);
@@ -182,4 +198,47 @@ export function applyRateLimit(
   }
 
   return { allowed: true };
+}
+
+/**
+ * Role-based permission definitions
+ */
+const ROLE_PERMISSIONS: Record<string, string[]> = {
+  super_admin: ['*'], // All permissions
+  admin: ['dashboard', 'knowledge-base', 'chat', 'alerts', 'users', 'settings', 'analytics', 'integrations'],
+  agent: ['dashboard', 'chat', 'alerts', 'knowledge-base'],
+  partner: ['partner-dashboard', 'products', 'catalogue', 'locations', 'profile', 'partner-analytics'],
+  user: ['chat'],
+};
+
+/**
+ * Check if a role has a specific permission
+ */
+export function hasPermission(role: string, permission: string): boolean {
+  const permissions = ROLE_PERMISSIONS[role];
+  
+  if (!permissions) {
+    return false;
+  }
+  
+  // Super admin has all permissions
+  if (permissions.includes('*')) {
+    return true;
+  }
+  
+  return permissions.includes(permission);
+}
+
+/**
+ * Extended verification that also returns authenticated status
+ */
+export async function verifyAuthTokenExtended(request: NextRequest): Promise<{
+  authenticated: boolean;
+  user: AuthenticatedUser | null;
+}> {
+  const user = await verifyAuthToken(request);
+  return {
+    authenticated: !!user,
+    user,
+  };
 }

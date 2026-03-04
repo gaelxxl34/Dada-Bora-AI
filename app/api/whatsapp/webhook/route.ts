@@ -3,6 +3,9 @@
  * This creates new chats with anonymous usernames and stores messages
  * Then calls AI to generate a response and sends it back via WhatsApp
  * 
+ * ENHANCED: Now includes Dada Bora personality, crisis detection, user profiling,
+ * and contextual product recommendations
+ * 
  * SECURITY: This endpoint validates Twilio signatures and has rate limiting
  */
 
@@ -12,6 +15,39 @@ import { applyRateLimit } from '@/lib/auth-middleware';
 import { generateAnonymousName, generateChatId, validateMessage, sanitizeMessage, hashPhoneNumber } from '@/lib/chat-utils';
 import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import twilio from 'twilio';
+
+// Import Dada Bora systems
+import { detectCrisis, getDadaCrisisResponse, getCrisisResources } from '@/lib/crisis-detection';
+import { createCrisisAlert } from '@/lib/alert-system';
+import { 
+  getUserProfile, 
+  createUserProfile, 
+  updateUserProfile, 
+  incrementTrustScore, 
+  updateRelationshipStage,
+  generateProfileContext,
+  extractPotentialFacts,
+  addUserMemory
+} from '@/lib/user-profile';
+import { 
+  generateFullSystemPrompt, 
+  generateGreeting,
+  DADA_BORA_CORE_IDENTITY 
+} from '@/lib/dada-personality';
+import { 
+  getProductContext, 
+  isAppropriateForRecommendation 
+} from '@/lib/product-recommendations';
+import { generateSpeech, DEFAULT_VOICE_ID } from '@/lib/elevenlabs';
+import {
+  getOrCreateProfileByPhoneHash,
+  generateOptimizedContext,
+  extractFactsFromMessage,
+  getRelevantKnowledge,
+  trackTokenUsage,
+  getProgressiveQuestion,
+  PROGRESSIVE_QUESTIONS,
+} from '@/lib/progressive-profile';
 
 // Mark route as dynamic (required for API routes with POST/GET handlers)
 export const dynamic = 'force-dynamic';
@@ -68,46 +104,73 @@ async function validateTwilioSignature(request: NextRequest, body: string): Prom
   }
 }
 
-// Helper function to fetch knowledge base content
-async function getKnowledgeBaseContent(): Promise<string> {
+// Helper function to fetch knowledge base content - NOW OPTIMIZED
+// Only fetches articles relevant to the user's message
+async function getKnowledgeBaseContent(userMessage: string): Promise<string> {
   try {
-    const articlesSnapshot = await adminDb
-      .collection('knowledgeArticles')
-      .where('status', '==', 'published')
-      .get();
-
-    if (articlesSnapshot.empty) {
-      return '';
-    }
-
-    const articles = articlesSnapshot.docs.map(doc => {
-      const data = doc.data();
-      return `## ${data.title}\nCategory: ${data.categoryName}\n${data.content}`;
-    });
-
-    return `\n\n---\n\nKNOWLEDGE BASE:\nThe following is your knowledge base containing verified information. Use this to provide accurate, consistent responses:\n\n${articles.join('\n\n---\n\n')}`;
+    // Use the optimized knowledge retrieval that only gets relevant articles
+    // This saves 500-1000 tokens per request!
+    const relevantKnowledge = await getRelevantKnowledge(userMessage, 2);
+    return relevantKnowledge;
   } catch (error) {
     console.error('Error fetching knowledge base:', error);
     return '';
   }
 }
 
-// Get AI response from configured provider
-async function getAIResponse(userMessage: string, chatHistory: Array<{role: string, content: string}> = []): Promise<string> {
+// Get AI response from configured provider - ENHANCED with Dada Bora personality
+// TOKEN OPTIMIZED: Only includes relevant context
+async function getAIResponse(
+  userMessage: string, 
+  chatHistory: Array<{role: string, content: string}> = [],
+  chatId?: string,
+  isCrisis?: boolean,
+  crisisContext?: string,
+  optimizedProfileContext?: string // NEW: Pre-computed optimized context
+): Promise<{ response: string; tokensUsed: number }> {
   try {
     const configDoc = await adminDb.collection('integrations').doc('chatbot').get();
     const config = configDoc.data();
 
     if (!config || !config.enabled) {
       console.log('AI chatbot is not enabled');
-      return '';
+      return { response: '', tokensUsed: 0 };
     }
 
-    const { provider, openaiApiKey, anthropicApiKey, model, systemPrompt, temperature, maxTokens } = config;
+    const { provider, openaiApiKey, anthropicApiKey, model, temperature, maxTokens } = config;
 
-    // Fetch knowledge base content and combine with system prompt
-    const knowledgeBaseContent = await getKnowledgeBaseContent();
-    const enhancedSystemPrompt = systemPrompt + knowledgeBaseContent;
+    // Fetch ONLY relevant knowledge base content (TOKEN OPTIMIZATION)
+    const knowledgeBaseContent = await getKnowledgeBaseContent(userMessage);
+    
+    // Use pre-computed optimized profile context (already token-optimized)
+    const profileContext = optimizedProfileContext || '';
+    
+    // Get user profile for product recommendations only
+    let productContext = '';
+    let userProfile = null;
+    
+    if (chatId && !isCrisis) {
+      userProfile = await getUserProfile(chatId);
+      if (userProfile) {
+        const recommendationCheck = isAppropriateForRecommendation(
+          userProfile, 
+          userMessage,
+          userProfile.currentMood
+        );
+        if (recommendationCheck.appropriate) {
+          productContext = await getProductContext(userProfile);
+        }
+      }
+    }
+
+    // Generate the full Dada Bora system prompt with all context
+    const enhancedSystemPrompt = generateFullSystemPrompt(
+      userProfile,
+      profileContext,
+      knowledgeBaseContent,
+      productContext,
+      crisisContext || ''
+    );
 
     if (provider === 'openai' && openaiApiKey) {
       const messages = [
@@ -125,7 +188,8 @@ async function getAIResponse(userMessage: string, chatHistory: Array<{role: stri
         body: JSON.stringify({
           model: model || 'gpt-4-turbo-preview',
           messages,
-          temperature: temperature || 0.7,
+          // Use lower temperature during crisis for more focused responses
+          temperature: isCrisis ? 0.5 : (temperature || 0.7),
           max_tokens: maxTokens || 500,
         }),
       });
@@ -134,10 +198,13 @@ async function getAIResponse(userMessage: string, chatHistory: Array<{role: stri
       
       if (!response.ok) {
         console.error('OpenAI API Error:', data);
-        return '';
+        return { response: '', tokensUsed: 0 };
       }
+      
+      // Track actual token usage
+      const tokensUsed = data.usage?.total_tokens || 0;
 
-      return data.choices?.[0]?.message?.content || '';
+      return { response: data.choices?.[0]?.message?.content || '', tokensUsed };
 
     } else if (provider === 'anthropic' && anthropicApiKey) {
       const messages = [
@@ -164,16 +231,116 @@ async function getAIResponse(userMessage: string, chatHistory: Array<{role: stri
 
       if (!response.ok) {
         console.error('Anthropic API Error:', data);
-        return '';
+        return { response: '', tokensUsed: 0 };
       }
+      
+      // Anthropic usage tracking
+      const tokensUsed = (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
 
-      return data.content?.[0]?.text || '';
+      return { response: data.content?.[0]?.text || '', tokensUsed };
     }
 
-    return '';
+    return { response: '', tokensUsed: 0 };
   } catch (error) {
     console.error('Error getting AI response:', error);
-    return '';
+    return { response: '', tokensUsed: 0 };
+  }
+}
+
+// Transcribe voice message using OpenAI Whisper
+async function transcribeVoiceMessage(mediaUrl: string, twilioAccountSid: string, twilioAuthToken: string): Promise<string | null> {
+  try {
+    // Download the audio from Twilio (requires auth)
+    const audioResponse = await fetch(mediaUrl, {
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(`${twilioAccountSid}:${twilioAuthToken}`).toString('base64'),
+      },
+    });
+
+    if (!audioResponse.ok) {
+      console.error('Failed to download voice message:', audioResponse.status);
+      return null;
+    }
+
+    const audioBuffer = await audioResponse.arrayBuffer();
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/ogg' });
+
+    // Get OpenAI key from config
+    const chatbotConfig = await adminDb.collection('integrations').doc('chatbot').get();
+    const config = chatbotConfig.data();
+    const openaiKey = config?.openaiApiKey;
+
+    if (!openaiKey) {
+      console.error('No OpenAI key configured for voice transcription');
+      return null;
+    }
+
+    // Send to Whisper API
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'voice.ogg');
+    formData.append('model', 'whisper-1');
+    formData.append('language', 'en');
+
+    const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiKey}`,
+      },
+      body: formData,
+    });
+
+    if (!whisperResponse.ok) {
+      console.error('Whisper transcription failed:', whisperResponse.status);
+      return null;
+    }
+
+    const result = await whisperResponse.json();
+    console.log(`🎤 Voice transcribed: "${result.text}"`);
+    return result.text;
+  } catch (error) {
+    console.error('Voice transcription error:', error);
+    return null;
+  }
+}
+
+// Send a voice note response via WhatsApp
+async function sendWhatsAppVoiceNote(
+  to: string, 
+  text: string, 
+  textFallback: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Get voice config
+    const voiceConfigDoc = await adminDb.collection('config').doc('voice').get();
+    const voiceConfig = voiceConfigDoc.exists ? voiceConfigDoc.data() : null;
+
+    if (!voiceConfig?.enabled || !voiceConfig?.elevenLabsApiKey) {
+      // Voice not configured, send text instead
+      return sendWhatsAppMessage(to, textFallback);
+    }
+
+    // Generate speech audio
+    const audioBuffer = await generateSpeech({
+      text,
+      voiceId: voiceConfig.voiceId || DEFAULT_VOICE_ID,
+      apiKey: voiceConfig.elevenLabsApiKey,
+      stability: voiceConfig.stability ?? 0.5,
+      similarityBoost: voiceConfig.similarityBoost ?? 0.75,
+      style: voiceConfig.style ?? 0.3,
+    });
+
+    // Upload audio to a temporary storage and get a URL
+    // For Twilio, we need a publicly accessible URL for media
+    // We'll use Twilio's own approach: send as base64 in a media message
+    // Actually, Twilio requires a URL. We'll host it temporarily.
+    
+    // For now, send the text response along with a note about voice
+    // Full voice note sending requires a media hosting solution
+    console.log('🔊 Voice note generated, sending text response (media hosting needed for voice notes)');
+    return sendWhatsAppMessage(to, textFallback);
+  } catch (error: any) {
+    console.error('Voice note error:', error);
+    return sendWhatsAppMessage(to, textFallback);
   }
 }
 
@@ -350,10 +517,44 @@ export async function POST(request: NextRequest) {
     // Handle Twilio WhatsApp webhook format
     // Twilio sends: From, To, Body, MessageSid, etc.
     const phoneNumber = body.From?.replace('whatsapp:', '') || '';
-    const message = body.Body || '';
+    let message = body.Body || '';
     const messageSid = body.MessageSid || '';
     const mediaUrl = body.MediaUrl0 || ''; // First media attachment if any
     const numMedia = parseInt(body.NumMedia || '0', 10);
+    const mediaContentType = body.MediaContentType0 || '';
+    let isVoiceMessage = false;
+    
+    // Handle voice messages - transcribe audio to text
+    if (numMedia > 0 && mediaContentType.startsWith('audio/') && !message) {
+      console.log(`🎤 Voice message detected (${mediaContentType}), transcribing...`);
+      isVoiceMessage = true;
+      
+      // Get Twilio credentials for downloading media
+      const whatsappDoc = await adminDb.collection('integrations').doc('whatsapp').get();
+      const waConfig = whatsappDoc.data();
+      
+      if (waConfig?.accountSid && waConfig?.authToken) {
+        const transcription = await transcribeVoiceMessage(
+          mediaUrl, 
+          waConfig.accountSid, 
+          waConfig.authToken
+        );
+        
+        if (transcription) {
+          message = transcription;
+          console.log(`🎤 Voice transcription: "${message}"`);
+        } else {
+          // Couldn't transcribe, send a friendly response
+          await sendWhatsAppMessage(phoneNumber, 
+            "Hey! I got your voice message but had trouble hearing it clearly. Could you try sending it again, or type out what you wanted to say? 💛"
+          );
+          return new NextResponse(
+            '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+            { status: 200, headers: { 'Content-Type': 'text/xml' } }
+          );
+        }
+      }
+    }
     
     if (!phoneNumber || !message) {
       console.log('Missing phone number or message content');
@@ -436,6 +637,7 @@ export async function POST(request: NextRequest) {
       messageSid, // Store Twilio message SID for reference
       mediaUrl: mediaUrl || null,
       numMedia,
+      ...(isVoiceMessage && { isVoiceMessage: true, originalMediaType: mediaContentType }),
     });
 
     console.log(`Message stored successfully for chat ${chatDocId}`);
@@ -452,10 +654,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Get recent chat history for context (last 5 messages for speed)
+    // Get recent chat history for context (last 10 messages = ~5 full exchanges)
     const recentMessages = await messagesRef
       .orderBy('timestamp', 'desc')
-      .limit(5)
+      .limit(10)
       .get();
 
     const chatHistory: Array<{role: string, content: string}> = [];
@@ -470,34 +672,157 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Get AI response
-    console.log('Calling AI service for response...');
-    const aiResponse = await getAIResponse(sanitizedMessage, chatHistory);
+    // ==========================================
+    // DADA BORA ENHANCED PROCESSING (TOKEN OPTIMIZED)
+    // ==========================================
+
+    // 1. CRISIS DETECTION - Check for dangerous content FIRST
+    let isCrisis = false;
+    let crisisContext = '';
+    const crisisAlert = detectCrisis(sanitizedMessage);
+    
+    if (crisisAlert) {
+      isCrisis = true;
+      console.log(`🚨 CRISIS DETECTED: ${crisisAlert.severity} - ${crisisAlert.type}`);
+      
+      // Create alert and notify admins/agents
+      try {
+        await createCrisisAlert(crisisAlert, chatDocId, anonymousName, sanitizedMessage);
+        console.log('Crisis alert created and notifications sent');
+      } catch (alertError) {
+        console.error('Failed to create crisis alert:', alertError);
+      }
+      
+      // Set crisis context for AI response
+      crisisContext = `
+⚠️ CRISIS DETECTED - ${crisisAlert.severity.toUpperCase()}
+Type: ${crisisAlert.type}
+Triggers found: ${crisisAlert.triggers.join(', ')}
+
+PRIORITY: This user may be in distress. Human support has been alerted.
+Your role: Provide immediate emotional support, stay calm, show you care.
+DO NOT: Minimize feelings, give clinical responses, or rush to solutions.
+DO: Listen, validate, express genuine concern, and gently encourage professional help.
+`;
+    }
+
+    // 2. USER PROFILE MANAGEMENT - Progressive & Token-Optimized
+    // Profile is linked to phone number hash - same phone = same profile forever
+    // Location is AUTO-DETECTED from phone country code!
+    const phoneHash = hashPhoneNumber(phoneNumber);
+    const { profile: userProfile, isNew, locationInfo } = await getOrCreateProfileByPhoneHash(
+      phoneHash,
+      chatDocId,
+      anonymousName,
+      phoneNumber // Pass actual number for location detection
+    );
+    
+    if (isNew) {
+      const locationStr = locationInfo 
+        ? ` from ${locationInfo.countryName} (${locationInfo.region})`
+        : '';
+      console.log(`📱 New user profile created for ${anonymousName}${locationStr}`);
+    } else {
+      // Returning user - increment trust and update interaction
+      await incrementTrustScore(chatDocId, 1);
+      await updateRelationshipStage(chatDocId);
+    }
+
+    // 2.5 EXTRACT FACTS BEFORE AI CALL — so profile is current for context generation
+    const extractedFacts = extractFactsFromMessage(sanitizedMessage);
+    if (Object.keys(extractedFacts).length > 0) {
+      console.log(`📝 Learned about user:`, extractedFacts);
+      await updateUserProfile(chatDocId, extractedFacts);
+      // Merge into local profile so generateOptimizedContext sees it immediately
+      Object.assign(userProfile, extractedFacts);
+    }
+
+    // 3. GENERATE TOKEN-OPTIMIZED CONTEXT
+    // Only includes what's RELEVANT to this message (saves 200-500 tokens!)
+    const { context: optimizedContext, tokenEstimate } = generateOptimizedContext(
+      userProfile,
+      sanitizedMessage,
+      isCrisis
+    );
+    console.log(`📊 Optimized context: ~${tokenEstimate} tokens (vs ~500 if full)`);
+
+    // Check if Dada should ask a progressive question to learn more
+    const progressiveQuestion = getProgressiveQuestion(userProfile);
+    if (progressiveQuestion && !isCrisis) {
+      console.log(`💜 Will naturally ask: "${progressiveQuestion.substring(0, 50)}..."`);
+    }
+
+    // Update user profile with current message context
+    await updateUserProfile(chatDocId, {
+      totalMessages: FieldValue.increment(1) as unknown as number,
+      recentTopics: [...(userProfile?.recentTopics || []).slice(-4), crisisAlert?.type || 'general'],
+      currentMood: isCrisis ? 'distressed' : undefined,
+      hasCrisisHistory: userProfile?.hasCrisisHistory || isCrisis,
+      requiresCarefulHandling: userProfile?.requiresCarefulHandling || (crisisAlert?.severity === 'critical'),
+    });
+
+    // 4. GET AI RESPONSE with Dada Bora personality (TOKEN OPTIMIZED)
+    console.log('Calling Dada Bora AI service...');
+    const { response: aiResponse, tokensUsed } = await getAIResponse(
+      sanitizedMessage, 
+      chatHistory, 
+      chatDocId,
+      isCrisis,
+      crisisContext,
+      optimizedContext // Pass pre-computed optimized context!
+    );
+    
+    // Track token usage for cost monitoring
+    if (tokensUsed > 0) {
+      await trackTokenUsage(chatDocId, tokensUsed);
+      console.log(`📊 Tokens used: ${tokensUsed}`);
+    }
 
     if (aiResponse) {
-      console.log(`AI response generated: ${aiResponse.substring(0, 100)}...`);
+      console.log(`Dada Bora response generated: ${aiResponse.substring(0, 100)}...`);
+
+      // Build final response
+      let finalResponse = aiResponse;
+      
+      // For critical crisis, append crisis resources
+      if (crisisAlert?.severity === 'critical') {
+        const resources = getCrisisResources();
+        finalResponse = `${aiResponse}\n\n${resources}`;
+      }
+      
+      // Add progressive question if appropriate (helps build relationship)
+      // Only add if not in crisis and the AI response doesn't already ask a question
+      if (progressiveQuestion && !isCrisis && !aiResponse.includes('?')) {
+        finalResponse = `${finalResponse}\n\n${progressiveQuestion}`;
+        // Mark that we asked this question
+        await updateUserProfile(chatDocId, {
+          recentQuestions: [...(userProfile?.recentQuestions || []).slice(-3), Object.keys(PROGRESSIVE_QUESTIONS).find(k => PROGRESSIVE_QUESTIONS[k as keyof typeof PROGRESSIVE_QUESTIONS]?.question === progressiveQuestion) || 'unknown'],
+        } as any);
+      }
 
       // Send AI response via WhatsApp
-      const sendResult = await sendWhatsAppMessage(phoneNumber, aiResponse);
+      const sendResult = await sendWhatsAppMessage(phoneNumber, finalResponse);
 
       if (sendResult.success) {
         // Store AI response in chat
         await messagesRef.add({
-          content: aiResponse,
+          content: finalResponse,
           timestamp: Timestamp.now(),
           isFromUser: false,
           messageSid: sendResult.messageSid,
+          wasCrisisResponse: isCrisis,
+          tokensUsed, // Track for analytics
         });
 
         // Update chat with AI response as last message
         await chatsRef.doc(chatDocId).update({
-          lastMessage: aiResponse,
+          lastMessage: finalResponse,
           lastMessageTime: Timestamp.now(),
         });
 
-        console.log(`AI response stored and sent successfully`);
+        console.log(`💜 Dada Bora response stored and sent successfully`);
       } else {
-        console.error(`Failed to send AI response: ${sendResult.error}`);
+        console.error(`Failed to send response: ${sendResult.error}`);
       }
     } else {
       console.log('No AI response generated (AI might be disabled)');
@@ -539,6 +864,6 @@ export async function GET() {
   return NextResponse.json({ 
     status: 'ok', 
     provider: 'twilio',
-    message: 'Twilio WhatsApp webhook endpoint is active'
+    message: 'Twilio WhatsApp webhook endpoint is active (Dada Bora Enhanced)'
   });
 }

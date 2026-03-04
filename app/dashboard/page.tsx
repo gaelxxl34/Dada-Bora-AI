@@ -5,6 +5,7 @@ import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestor
 import { db } from '../../lib/firebase';
 import DashboardLayout from '../../components/dashboard/DashboardLayout';
 import { useAuth } from '../../contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 interface ActivityLog {
@@ -16,40 +17,81 @@ interface ActivityLog {
 }
 
 export default function DashboardPage() {
-  const { userProfile, user } = useAuth();
+  const { userProfile, user, loading } = useAuth();
+  const router = useRouter();
   const [usersCount, setUsersCount] = useState(0);
   const [articlesCount, setArticlesCount] = useState(0);
   const [categoriesCount, setCategoriesCount] = useState(0);
   const [recentActivities, setRecentActivities] = useState<ActivityLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load users count
+  // Redirect non-admin users to their respective dashboards
   useEffect(() => {
+    if (loading || !userProfile) return;
+    
+    if (userProfile.role === 'partner') {
+      router.replace('/dashboard/partner');
+      return;
+    }
+    if (userProfile.role === 'agent') {
+      router.replace('/dashboard/agent');
+      return;
+    }
+    if (userProfile.role === 'user') {
+      // Regular users don't have dashboard access - redirect to home
+      router.replace('/');
+      return;
+    }
+  }, [userProfile, loading, router]);
+
+  // Check if user is admin (to prevent loading data for non-admins)
+  const isAdmin = userProfile?.role === 'admin' || userProfile?.role === 'super_admin';
+
+  // Load users count - only for admins
+  useEffect(() => {
+    if (!isAdmin) return;
+    
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
       setUsersCount(snapshot.size);
+    }, (error) => {
+      console.error('Error loading users:', error);
     });
     return () => unsubscribe();
-  }, []);
+  }, [isAdmin]);
 
-  // Load articles count
+  // Load articles count - only for admins
   useEffect(() => {
+    if (!isAdmin) return;
+    
     const unsubscribe = onSnapshot(collection(db, 'knowledgeArticles'), (snapshot) => {
       setArticlesCount(snapshot.size);
+    }, (error) => {
+      console.error('Error loading articles:', error);
     });
     return () => unsubscribe();
-  }, []);
+  }, [isAdmin]);
 
-  // Load categories count
+  // Load categories count - only for admins
   useEffect(() => {
+    if (!isAdmin) {
+      setIsLoading(false);
+      return;
+    }
+    
     const unsubscribe = onSnapshot(collection(db, 'knowledgeCategories'), (snapshot) => {
       setCategoriesCount(snapshot.size);
       setIsLoading(false);
+    }, (error) => {
+      console.error('Error loading categories:', error);
+      setIsLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [isAdmin]);
 
-  // Load recent activities (from activity logs or create from recent data)
+  // Load recent activities - only for admins
   useEffect(() => {
+    if (!isAdmin) return;
+    
     // Try to load from activityLogs collection, or create from recent users/articles
     const activitiesQuery = query(
       collection(db, 'activityLogs'),
@@ -75,7 +117,7 @@ export default function DashboardPage() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isAdmin]);
 
   // Format relative time
   const formatRelativeTime = (date: Date) => {

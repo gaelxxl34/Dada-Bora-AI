@@ -10,53 +10,189 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-const menuItems = [
+interface MenuItem {
+  name: string;
+  href: string;
+  icon: string;
+  activeIcon: string;
+  roles?: string[]; // If undefined, available to all roles
+}
+
+// Menu items with role-based access
+const allMenuItems: MenuItem[] = [
+  // Admin/Super Admin items
   {
     name: 'Dashboard',
     href: '/dashboard',
     icon: 'ri-dashboard-line',
     activeIcon: 'ri-dashboard-fill',
+    roles: ['super_admin', 'admin'],
   },
   {
     name: 'Knowledge Base',
     href: '/dashboard/knowledge-base',
     icon: 'ri-book-open-line',
     activeIcon: 'ri-book-open-fill',
+    roles: ['super_admin', 'admin'],
   },
   {
     name: 'Chat',
     href: '/dashboard/chat',
     icon: 'ri-chat-3-line',
     activeIcon: 'ri-chat-3-fill',
+    roles: ['super_admin', 'admin'],
+  },
+  {
+    name: 'Crisis Alerts',
+    href: '/dashboard/alerts',
+    icon: 'ri-alarm-warning-line',
+    activeIcon: 'ri-alarm-warning-fill',
+    roles: ['super_admin', 'admin', 'agent'],
   },
   {
     name: 'Users',
     href: '/dashboard/users',
     icon: 'ri-user-line',
     activeIcon: 'ri-user-fill',
+    roles: ['super_admin', 'admin'],
+  },
+  {
+    name: 'User Analytics',
+    href: '/dashboard/analytics',
+    icon: 'ri-pie-chart-line',
+    activeIcon: 'ri-pie-chart-fill',
+    roles: ['super_admin', 'admin'],
   },
   {
     name: 'Settings',
     href: '/dashboard/settings',
     icon: 'ri-settings-3-line',
     activeIcon: 'ri-settings-3-fill',
+    roles: ['super_admin', 'admin'],
   },
   {
     name: 'Debug',
     href: '/dashboard/debug',
     icon: 'ri-bug-line',
     activeIcon: 'ri-bug-fill',
+    roles: ['super_admin'],
+  },
+  
+  // Partner items
+  {
+    name: 'Overview',
+    href: '/dashboard/partner',
+    icon: 'ri-home-4-line',
+    activeIcon: 'ri-home-4-fill',
+    roles: ['partner'],
+  },
+  {
+    name: 'My Products',
+    href: '/dashboard/partner/products',
+    icon: 'ri-shopping-bag-line',
+    activeIcon: 'ri-shopping-bag-fill',
+    roles: ['partner'],
+  },
+  {
+    name: 'Catalogue',
+    href: '/dashboard/partner/catalogue',
+    icon: 'ri-image-2-line',
+    activeIcon: 'ri-image-2-fill',
+    roles: ['partner'],
+  },
+  {
+    name: 'Locations',
+    href: '/dashboard/partner/locations',
+    icon: 'ri-map-pin-line',
+    activeIcon: 'ri-map-pin-fill',
+    roles: ['partner'],
+  },
+  {
+    name: 'Business Profile',
+    href: '/dashboard/partner/profile',
+    icon: 'ri-store-2-line',
+    activeIcon: 'ri-store-2-fill',
+    roles: ['partner'],
+  },
+  {
+    name: 'Analytics',
+    href: '/dashboard/partner/analytics',
+    icon: 'ri-bar-chart-line',
+    activeIcon: 'ri-bar-chart-fill',
+    roles: ['partner'],
+  },
+  
+  // Agent items
+  {
+    name: 'My Dashboard',
+    href: '/dashboard/agent',
+    icon: 'ri-home-4-line',
+    activeIcon: 'ri-home-4-fill',
+    roles: ['agent'],
+  },
+  {
+    name: 'Knowledge Base',
+    href: '/dashboard/agent/knowledge-base',
+    icon: 'ri-book-open-line',
+    activeIcon: 'ri-book-open-fill',
+    roles: ['agent'],
+  },
+  {
+    name: 'My Articles',
+    href: '/dashboard/agent/my-articles',
+    icon: 'ri-file-text-line',
+    activeIcon: 'ri-file-text-fill',
+    roles: ['agent'],
+  },
+  {
+    name: 'Chat Support',
+    href: '/dashboard/agent/chat',
+    icon: 'ri-chat-3-line',
+    activeIcon: 'ri-chat-3-fill',
+    roles: ['agent'],
   },
 ];
+
+// Helper to get role display name
+const getRoleDisplayName = (role: string): string => {
+  const roleNames: Record<string, string> = {
+    super_admin: 'Super Admin',
+    admin: 'Admin',
+    partner: 'Partner',
+    agent: 'Agent',
+    user: 'User',
+  };
+  return roleNames[role] || role;
+};
 
 export default function Sidebar({ onSignOut, userRole, isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
 
+  // Filter menu items based on user role
+  const menuItems = allMenuItems.filter(item => {
+    if (!item.roles) return true; // Available to all
+    if (!userRole) return false;
+    return item.roles.includes(userRole);
+  });
+
   const isActive = (href: string) => {
-    if (href === '/dashboard') {
+    if (href === '/dashboard' && userRole && ['super_admin', 'admin'].includes(userRole)) {
       return pathname === '/dashboard';
     }
-    return pathname.startsWith(href);
+    if (href === '/dashboard/partner' && userRole === 'partner') {
+      return pathname === '/dashboard/partner';
+    }
+    if (href === '/dashboard/agent' && userRole === 'agent') {
+      return pathname === '/dashboard/agent';
+    }
+    return pathname.startsWith(href) && href !== '/dashboard/partner' && href !== '/dashboard/agent' && href !== '/dashboard';
+  };
+
+  // Get panel title based on role
+  const getPanelTitle = () => {
+    if (userRole === 'partner') return 'Partner Portal';
+    if (userRole === 'agent') return 'Agent Portal';
+    return 'Admin Panel';
   };
 
   return (
@@ -79,16 +215,28 @@ export default function Sidebar({ onSignOut, userRole, isOpen, onClose }: Sideba
           <h1 className="font-playfair font-bold text-warm-brown text-lg leading-tight">
             Dada Bora
           </h1>
-          <span className="text-xs text-gray-500">Admin Panel</span>
+          <span className="text-xs text-gray-500">{getPanelTitle()}</span>
         </div>
       </div>
 
       {/* Role Badge */}
       {userRole && (
         <div className="px-6 py-4">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gold/20 text-warm-brown text-xs font-medium rounded-full">
-            <i aria-hidden="true" className="ri-shield-star-line" />
-            {userRole}
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full ${
+            userRole === 'super_admin' ? 'bg-purple-100 text-purple-700' :
+            userRole === 'admin' ? 'bg-gold/20 text-warm-brown' :
+            userRole === 'partner' ? 'bg-blue-100 text-blue-700' :
+            userRole === 'agent' ? 'bg-green-100 text-green-700' :
+            'bg-gray-100 text-gray-700'
+          }`}>
+            <i aria-hidden="true" className={
+              userRole === 'super_admin' ? 'ri-shield-star-line' :
+              userRole === 'admin' ? 'ri-shield-user-line' :
+              userRole === 'partner' ? 'ri-store-2-line' :
+              userRole === 'agent' ? 'ri-customer-service-line' :
+              'ri-user-line'
+            } />
+            {getRoleDisplayName(userRole)}
           </span>
         </div>
       )}

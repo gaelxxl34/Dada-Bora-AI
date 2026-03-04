@@ -6,6 +6,7 @@ import { db } from '../../../lib/firebase';
 import DashboardLayout from '../../../components/dashboard/DashboardLayout';
 import CategoryModal from '../../../components/dashboard/CategoryModal';
 import ArticleModal from '../../../components/dashboard/ArticleModal';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Category {
   id: string;
@@ -30,6 +31,7 @@ interface Article {
 }
 
 export default function KnowledgeBasePage() {
+  const { user, userProfile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [categories, setCategories] = useState<Category[]>([]);
@@ -119,7 +121,8 @@ export default function KnowledgeBasePage() {
           color: categoryData.color,
           count: 0,
           createdAt: Timestamp.now(),
-          createdBy: 'current-user-id', // TODO: Replace with actual user ID from auth
+          createdBy: user?.uid || '',
+          createdByName: userProfile?.displayName || user?.email || '',
           updatedAt: Timestamp.now(),
         });
       }
@@ -173,7 +176,8 @@ export default function KnowledgeBasePage() {
           views: 0,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
-          createdBy: 'current-user-id', // TODO: Replace with actual user ID from auth
+          createdBy: user?.uid || '',
+          createdByName: userProfile?.displayName || user?.email || '',
         });
 
         // Increment category count

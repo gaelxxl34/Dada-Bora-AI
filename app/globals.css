@@ -101,3 +101,29 @@ a:focus-visible {
 ::selection {
   @apply bg-gold/30 text-warm-brown;
 }
+
+/* Phone input custom styles */
+.phone-input-custom {
+  @apply w-full;
+}
+
+.phone-input-custom .PhoneInputInput {
+  @apply flex-1 px-4 py-3 border border-gray-200 rounded-xl text-base outline-none;
+  @apply focus:ring-2 focus:ring-gold focus:border-transparent;
+}
+
+.phone-input-custom .PhoneInputCountry {
+  @apply mr-2;
+}
+
+.phone-input-custom .PhoneInputCountrySelect {
+  @apply absolute opacity-0 w-full h-full cursor-pointer;
+}
+
+.phone-input-custom .PhoneInputCountryIcon {
+  @apply w-8 h-6 rounded overflow-hidden;
+}
+
+.phone-input-custom .PhoneInputCountrySelectArrow {
+  @apply ml-1 border-warm-brown opacity-60;
+}

@@ -6,6 +6,8 @@ import { db } from '../../../lib/firebase';
 import { apiPost } from '../../../lib/api-client';
 import DashboardLayout from '../../../components/dashboard/DashboardLayout';
 import UserModal from '../../../components/dashboard/UserModal';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 
 interface User {
   id: string;
@@ -17,6 +19,8 @@ interface User {
 }
 
 export default function UsersPage() {
+  const { userProfile, loading } = useAuth();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
   const [users, setUsers] = useState<User[]>([]);
@@ -24,8 +28,24 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load users from Firestore
+  // Check admin access
+  const isAdmin = userProfile?.role === 'admin' || userProfile?.role === 'super_admin';
+
+  // Redirect non-admins
   useEffect(() => {
+    if (loading) return;
+    if (!isAdmin) {
+      router.replace('/dashboard');
+    }
+  }, [isAdmin, loading, router]);
+
+  // Load users from Firestore - only for admins
+  useEffect(() => {
+    if (!isAdmin) {
+      setIsLoading(false);
+      return;
+    }
+    
     const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -57,7 +77,7 @@ export default function UsersPage() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isAdmin]);
 
   // Filter users based on role and search query
   const filteredUsers = users.filter(user => {

@@ -80,7 +80,7 @@ export default function DashboardHeader({
             </div>
             <div className="hidden md:block">
               <p className="text-sm font-medium text-gray-900">
-                {userName || 'Admin'}
+                {userName || userEmail?.split('@')[0] || 'User'}
               </p>
               <p className="text-xs text-gray-500 truncate max-w-[120px]">{userEmail}</p>
             </div>
