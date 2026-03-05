@@ -32,6 +32,7 @@ import {
 import { 
   generateFullSystemPrompt, 
   generateGreeting,
+  calibrateResponseLength,
   DADA_BORA_CORE_IDENTITY 
 } from '@/lib/dada-personality';
 import { 
@@ -126,7 +127,8 @@ async function getAIResponse(
   chatId?: string,
   isCrisis?: boolean,
   crisisContext?: string,
-  optimizedProfileContext?: string // NEW: Pre-computed optimized context
+  optimizedProfileContext?: string,
+  responseCalibration?: { maxTokens: number; lengthHint: string }
 ): Promise<{ response: string; tokensUsed: number }> {
   try {
     const configDoc = await adminDb.collection('integrations').doc('chatbot').get();
@@ -169,8 +171,14 @@ async function getAIResponse(
       profileContext,
       knowledgeBaseContent,
       productContext,
-      crisisContext || ''
+      crisisContext || '',
+      responseCalibration?.lengthHint
     );
+
+    // Use calibrated max_tokens (capped by config), fallback to config value
+    const calibratedMaxTokens = responseCalibration
+      ? Math.min(responseCalibration.maxTokens, maxTokens || 1000)
+      : (maxTokens || 500);
 
     // Helper: call OpenAI
     const callOpenAI = async (useModel: string): Promise<{ response: string; tokensUsed: number } | null> => {
@@ -190,7 +198,7 @@ async function getAIResponse(
           model: useModel,
           messages,
           temperature: isCrisis ? 0.5 : (temperature || 0.7),
-          max_tokens: maxTokens || 500,
+          max_tokens: calibratedMaxTokens,
         }),
       });
       const data = await res.json();
@@ -217,7 +225,7 @@ async function getAIResponse(
         },
         body: JSON.stringify({
           model: useModel,
-          max_tokens: maxTokens || 500,
+          max_tokens: calibratedMaxTokens,
           system: enhancedSystemPrompt,
           messages,
         }),
@@ -772,6 +780,8 @@ DO: Listen, validate, express genuine concern, and gently encourage professional
     });
 
     // 4. GET AI RESPONSE with Dada Bora personality (TOKEN OPTIMIZED)
+    const responseCalibration = calibrateResponseLength(sanitizedMessage, isCrisis, chatHistory.length);
+    console.log(`📏 Response calibration: intent=${responseCalibration.intent}, maxTokens=${responseCalibration.maxTokens}`);
     console.log('Calling Dada Bora AI service...');
     const { response: aiResponse, tokensUsed } = await getAIResponse(
       sanitizedMessage, 
@@ -779,7 +789,8 @@ DO: Listen, validate, express genuine concern, and gently encourage professional
       chatDocId,
       isCrisis,
       crisisContext,
-      optimizedContext // Pass pre-computed optimized context!
+      optimizedContext,
+      responseCalibration
     );
     
     // Track token usage for cost monitoring

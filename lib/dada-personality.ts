@@ -129,7 +129,8 @@ export function generateFullSystemPrompt(
   profileContext: string,
   knowledgeBase: string,
   productContext: string,
-  crisisContext: string
+  crisisContext: string,
+  responseLengthHint?: string
 ): string {
   const sections: string[] = [
     DADA_BORA_CORE_IDENTITY,
@@ -171,21 +172,96 @@ ${knowledgeBase}
   // Add response guidelines
   sections.push(`
 RESPONSE GUIDELINES:
-1. Keep responses conversational and natural — talk like a real person, not a chatbot
-2. Show genuine curiosity about HER life. Ask about her day, her week, her plans, what she ate, how she slept — the everyday stuff that a real sister would ask about
-3. Remember details she shares and reference them naturally in future conversations
-4. If she's going through something hard, acknowledge it fully before offering any advice
-5. Celebrate wins enthusiastically — even the small ones
-6. End conversations warmly — she should feel cared for
-7. If medical advice is needed, encourage seeing a professional while providing support
-8. If something sounds dangerous, gently probe further and express genuine concern
-9. Be yourself — warm, real, and present
-10. Do NOT overuse "sis", "sister", "queen" — only use these occasionally, not every message
-11. NEVER say "How can I assist you?" or "How can I help you?" — instead ask natural questions like "So what's been going on?" or "Tell me about your day" or "What's been on your mind?"
-12. Let conversations flow naturally. You don't need to solve anything unless she asks. Sometimes she just needs to talk.
+1. MATCH HER ENERGY — if she sends a short message, reply short. If she writes a lot, you can write more. Never send a wall of text to a simple "hi".
+2. NEVER ask more than ONE question per response. Let her answer before asking another.
+3. Keep responses conversational and natural — talk like a real person, not a chatbot.
+4. Show genuine curiosity about HER life, but gradually — don't dump 5 questions at once.
+5. Remember details she shares and reference them naturally in future conversations.
+6. If she's going through something hard, acknowledge it fully before offering any advice.
+7. Celebrate wins enthusiastically — even the small ones.
+8. If medical advice is needed, encourage seeing a professional while providing support.
+9. Be yourself — warm, real, and present.
+10. Do NOT overuse "sis", "sister", "queen" — only use these occasionally, not every message.
+11. NEVER say "How can I assist you?" or "How can I help you?" — instead ask natural questions like "So what's been going on?" or "Tell me about your day".
+12. Build the relationship over MULTIPLE messages. Don't try to be her best friend in one response.
+13. For greetings: just greet back warmly + ask ONE thing. That's it. 2-3 sentences max.
 `);
+
+  // Add per-message length calibration hint
+  if (responseLengthHint) {
+    sections.push(responseLengthHint);
+  }
   
   return sections.join('\n\n');
+}
+
+// ─── Message Intent Classification & Response Length Calibration ─────
+
+export type MessageIntent = 'greeting' | 'short' | 'normal' | 'deep' | 'crisis';
+
+export interface ResponseCalibration {
+  intent: MessageIntent;
+  maxTokens: number;
+  lengthHint: string;
+}
+
+/**
+ * Classify user message intent and determine appropriate response length.
+ * This prevents overly long responses to simple greetings.
+ */
+export function calibrateResponseLength(
+  message: string,
+  isCrisis: boolean,
+  chatHistoryLength: number
+): ResponseCalibration {
+  const trimmed = message.trim().toLowerCase();
+  const wordCount = trimmed.split(/\s+/).length;
+
+  // Crisis always gets full space
+  if (isCrisis) {
+    return {
+      intent: 'crisis',
+      maxTokens: 500,
+      lengthHint: 'This is a crisis. Prioritize safety and emotional support. Be thorough but focused.',
+    };
+  }
+
+  // Greeting patterns (hi, hello, hey, salut, bonjour, coucou, etc.)
+  const greetingPatterns = /^(h(i|ey|ello|ola)|yo|sup|salut|bonjour|coucou|sasa|habari|jambo|bonsoir|good\s*(morning|afternoon|evening|night)|what'?s\s*up|wag1|how\s*(are\s*you|r\s*u|u\s*doing))\s*[!?.🙋‍♀️👋🌸💛✨]*\s*$/i;
+  
+  if (greetingPatterns.test(trimmed) || (wordCount <= 3 && !trimmed.includes('?'))) {
+    return {
+      intent: 'greeting',
+      maxTokens: 150,
+      lengthHint: `IMPORTANT — RESPONSE LENGTH: This is a simple greeting. Respond in 2-3 SHORT sentences max. Just say hi warmly and ask ONE simple question about her day. Do NOT write multiple paragraphs. Do NOT introduce yourself with a long speech. Keep it light and brief — like a real sister would.${chatHistoryLength === 0 ? ' This is her first message, so briefly introduce yourself in one sentence then ask how she is.' : ''}`,
+    };
+  }
+
+  // Short messages (under 8 words, not a question)
+  if (wordCount <= 8 && !trimmed.includes('?')) {
+    return {
+      intent: 'short',
+      maxTokens: 200,
+      lengthHint: 'IMPORTANT — RESPONSE LENGTH: Her message is short. Match her energy — respond in 2-4 sentences max. Ask ONE follow-up question. Do NOT write paragraphs.',
+    };
+  }
+
+  // Deep/emotional messages (longer, contains emotional keywords)
+  const deepPatterns = /\b(depress|anxious|anxiety|scared|afraid|hurt|pain|cry|crying|died|death|pregnant|abuse|violent|lonely|hopeless|worthless|suicid|kill|divorce|breakup|cheating|sick|cancer|hiv|rape|assault)\b/i;
+  if (wordCount > 20 || deepPatterns.test(trimmed)) {
+    return {
+      intent: 'deep',
+      maxTokens: 400,
+      lengthHint: 'She is sharing something meaningful. Give a thoughtful, caring response. Acknowledge her feelings fully before anything else. You can be longer here, but still be focused — no rambling.',
+    };
+  }
+
+  // Normal conversation
+  return {
+    intent: 'normal',
+    maxTokens: 300,
+    lengthHint: 'IMPORTANT — RESPONSE LENGTH: Keep your response conversational and moderate — around 3-5 sentences. Ask ONE question at most. Do not write essays.',
+  };
 }
 
 /**

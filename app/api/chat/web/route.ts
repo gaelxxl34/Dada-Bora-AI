@@ -29,7 +29,8 @@ import {
   getProgressiveQuestion,
 } from '@/lib/progressive-profile';
 import { 
-  generateFullSystemPrompt, 
+  generateFullSystemPrompt,
+  calibrateResponseLength,
 } from '@/lib/dada-personality';
 import { 
   getProductContext, 
@@ -52,7 +53,8 @@ async function getAIResponse(
   isCrisis: boolean,
   crisisContext: string,
   optimizedProfileContext: string,
-  language: ChatLanguage = 'en'
+  language: ChatLanguage = 'en',
+  responseCalibration?: { maxTokens: number; lengthHint: string }
 ): Promise<{ response: string; tokensUsed: number }> {
   try {
     const configDoc = await adminDb.collection('integrations').doc('chatbot').get();
@@ -95,14 +97,20 @@ async function getAIResponse(
       }
     }
 
-    // Generate system prompt
+    // Generate system prompt with response length hint
     const enhancedSystemPrompt = generateFullSystemPrompt(
       userProfile,
       optimizedProfileContext,
       knowledgeBaseContent,
       productContext,
-      crisisContext
+      crisisContext,
+      responseCalibration?.lengthHint
     ) + getLanguageInstruction(language);
+
+    // Use calibrated max_tokens (capped by config), fallback to config value
+    const calibratedMaxTokens = responseCalibration
+      ? Math.min(responseCalibration.maxTokens, maxTokens || 1000)
+      : (maxTokens || 500);
 
     // Helper: call OpenAI
     const callOpenAI = async (useModel: string): Promise<{ response: string; tokensUsed: number } | null> => {
@@ -122,7 +130,7 @@ async function getAIResponse(
           model: useModel,
           messages,
           temperature: isCrisis ? 0.5 : (temperature || 0.7),
-          max_tokens: maxTokens || 500,
+          max_tokens: calibratedMaxTokens,
         }),
       });
       const data = await res.json();
@@ -150,7 +158,7 @@ async function getAIResponse(
         },
         body: JSON.stringify({
           model: useModel,
-          max_tokens: maxTokens || 500,
+          max_tokens: calibratedMaxTokens,
           system: enhancedSystemPrompt,
           messages,
         }),
@@ -363,7 +371,11 @@ Your role: Provide immediate emotional support, stay calm, show you care.
       requiresCarefulHandling: userProfile?.requiresCarefulHandling || (crisisAlert?.severity === 'critical'),
     });
 
-    // 4. GET AI RESPONSE
+    // 4. CALIBRATE RESPONSE LENGTH
+    const responseCalibration = calibrateResponseLength(sanitizedMessage, isCrisis, chatHistory.length);
+    console.log(`📏 Response calibration: intent=${responseCalibration.intent}, maxTokens=${responseCalibration.maxTokens}`);
+
+    // 5. GET AI RESPONSE
     const { response: aiResponse, tokensUsed } = await getAIResponse(
       sanitizedMessage,
       chatHistory,
@@ -371,7 +383,8 @@ Your role: Provide immediate emotional support, stay calm, show you care.
       isCrisis,
       crisisContext,
       optimizedContext,
-      language || 'en'
+      language || 'en',
+      responseCalibration
     );
 
     if (tokensUsed > 0) {
