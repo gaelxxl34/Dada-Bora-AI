@@ -5,8 +5,6 @@ import Image from 'next/image';
 import PhoneInput from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 import { chatTranslations, detectBrowserLanguage, type ChatLanguage } from '@/lib/chat-translations';
-import { auth } from '@/lib/firebase';
-import { signInWithPhoneNumber, RecaptchaVerifier, ConfirmationResult } from 'firebase/auth';
 
 // Types
 interface Message {
@@ -25,13 +23,16 @@ interface SessionData {
   expiresAt: string;
 }
 
-type ViewState = 'phone' | 'otp' | 'chat';
+type ViewState = 'phone' | 'pin' | 'create-pin' | 'chat';
 
 export default function WebChatPage() {
   // State
   const [view, setView] = useState<ViewState>('phone');
   const [phoneNumber, setPhoneNumber] = useState<string | undefined>('');
-  const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
+  const [pinCode, setPinCode] = useState(['', '', '', '']);
+  const [confirmPinCode, setConfirmPinCode] = useState(['', '', '', '']);
+  const [isConfirmingPin, setIsConfirmingPin] = useState(false);
+  const [isLegacyUser, setIsLegacyUser] = useState(false);
   const [session, setSession] = useState<SessionData | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -50,17 +51,13 @@ export default function WebChatPage() {
   const [lang, setLang] = useState<ChatLanguage>('en');
   const t = useMemo(() => chatTranslations[lang], [lang]);
   
-  // reCAPTCHA state
-  const [recaptchaSolved, setRecaptchaSolved] = useState(false);
-  
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const confirmPinRefs = useRef<(HTMLInputElement | null)[]>([]);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const confirmationResultRef = useRef<ConfirmationResult | null>(null);
-  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
   // Scroll to bottom of messages
   const scrollToBottom = useCallback(() => {
@@ -75,36 +72,6 @@ export default function WebChatPage() {
   useEffect(() => {
     setLang(detectBrowserLanguage());
   }, []);
-
-  // Setup visible reCAPTCHA widget when phone view is shown
-  useEffect(() => {
-    if (view !== 'phone') return;
-    // Small delay to ensure the DOM container is rendered
-    const timer = setTimeout(() => {
-      const container = document.getElementById('recaptcha-container');
-      if (!container || recaptchaVerifierRef.current) return;
-      
-      try {
-        const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'normal',
-          callback: () => {
-            setRecaptchaSolved(true);
-          },
-          'expired-callback': () => {
-            setRecaptchaSolved(false);
-          }
-        });
-        recaptchaVerifierRef.current = verifier;
-        verifier.render().catch((err: unknown) => {
-          console.warn('reCAPTCHA render failed:', err);
-        });
-      } catch (err) {
-        console.warn('reCAPTCHA setup failed:', err);
-      }
-    }, 500);
-    
-    return () => clearTimeout(timer);
-  }, [view]);
 
   // Check if browser supports speech recognition & mic permission
   useEffect(() => {
@@ -409,139 +376,178 @@ export default function WebChatPage() {
     setLoading(true);
 
     try {
-      if (!recaptchaVerifierRef.current) {
-        setError(lang === 'fr' ? 'Veuillez compléter la vérification reCAPTCHA.' : 'Please complete the reCAPTCHA verification.');
-        setLoading(false);
-        return;
-      }
+      // Check if phone number already has an account
+      const response = await fetch('/api/auth/otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'check-phone', phoneNumber }),
+      });
+      const data = await response.json();
 
-      const confirmationResult = await signInWithPhoneNumber(
-        auth,
-        phoneNumber || '',
-        recaptchaVerifierRef.current
-      );
-      
-      confirmationResultRef.current = confirmationResult;
-      setView('otp');
-      setOtpCode(['', '', '', '', '', '']);
-      setTimeout(() => otpRefs.current[0]?.focus(), 100);
-    } catch (err: unknown) {
-      console.error('Firebase Phone Auth error:', err);
-      const firebaseError = err as { code?: string; message?: string };
-      if (firebaseError.code === 'auth/invalid-phone-number') {
-        setError(lang === 'fr' ? 'Numéro de téléphone invalide.' : 'Invalid phone number format.');
-      } else if (firebaseError.code === 'auth/too-many-requests') {
-        setError(lang === 'fr' ? 'Trop de tentatives. Réessaie plus tard.' : 'Too many attempts. Please try again later.');
-      } else if (firebaseError.code === 'auth/captcha-check-failed') {
-        setError(lang === 'fr' ? 'Vérification reCAPTCHA échouée. Recharge la page.' : 'reCAPTCHA verification failed. Please reload the page.');
-      } else if (firebaseError.code === 'auth/invalid-app-credential') {
-        setError(lang === 'fr' 
-          ? 'Erreur de configuration Firebase. Vérifie que l\'API reCAPTCHA Enterprise est activée.' 
-          : 'Firebase configuration error. Please ensure reCAPTCHA Enterprise API is enabled in Google Cloud Console.');
+      if (data.exists) {
+        // Existing user → go to login PIN view
+        setView('pin');
+        setIsLegacyUser(false);
+        setPinCode(['', '', '', '']);
+        setTimeout(() => pinRefs.current[0]?.focus(), 100);
       } else {
-        setError(t.failedOtp);
+        // New user → go to create PIN view
+        setView('create-pin');
+        setPinCode(['', '', '', '']);
+        setConfirmPinCode(['', '', '', '']);
+        setIsConfirmingPin(false);
+        setTimeout(() => pinRefs.current[0]?.focus(), 100);
       }
-      // Reset reCAPTCHA on error so it can be retried
-      if (recaptchaVerifierRef.current) {
-        try { recaptchaVerifierRef.current.clear(); } catch { /* ignore */ }
-        recaptchaVerifierRef.current = null;
-      }
-      setRecaptchaSolved(false);
+    } catch {
+      setError(t.failedOtp);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle OTP input
-  const handleOtpChange = (index: number, value: string) => {
+  // Handle PIN input
+  const handlePinChange = (index: number, value: string, isConfirm = false) => {
     if (!/^\d*$/.test(value)) return;
 
-    const newOtp = [...otpCode];
-    newOtp[index] = value.slice(-1);
-    setOtpCode(newOtp);
-
-    // Auto-focus next input
-    if (value && index < 5) {
-      otpRefs.current[index + 1]?.focus();
+    if (isConfirm) {
+      const newPin = [...confirmPinCode];
+      newPin[index] = value.slice(-1);
+      setConfirmPinCode(newPin);
+      if (value && index < 3) {
+        confirmPinRefs.current[index + 1]?.focus();
+      }
+    } else {
+      const newPin = [...pinCode];
+      newPin[index] = value.slice(-1);
+      setPinCode(newPin);
+      if (value && index < 3) {
+        pinRefs.current[index + 1]?.focus();
+      }
     }
   };
 
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace' && !otpCode[index] && index > 0) {
-      otpRefs.current[index - 1]?.focus();
+  const handlePinKeyDown = (index: number, e: React.KeyboardEvent, isConfirm = false) => {
+    if (e.key === 'Backspace' && index > 0) {
+      if (isConfirm) {
+        if (!confirmPinCode[index]) confirmPinRefs.current[index - 1]?.focus();
+      } else {
+        if (!pinCode[index]) pinRefs.current[index - 1]?.focus();
+      }
     }
   };
 
-  // Verify OTP via Firebase, then create server session
-  const handleVerifyOTP = async () => {
+  // Handle PIN login (existing user)
+  const handlePinLogin = async () => {
     setError('');
     setLoading(true);
 
-    const code = otpCode.join('');
+    const pin = pinCode.join('');
 
     try {
-      if (!confirmationResultRef.current) {
-        setError(t.verificationFailed);
-        setLoading(false);
-        return;
-      }
-
-      // Step 1: Verify code with Firebase on the client
-      const userCredential = await confirmationResultRef.current.confirm(code);
-      const idToken = await userCredential.user.getIdToken();
-
-      // Step 2: Send Firebase ID token to our server to create a chat session
       const response = await fetch('/api/auth/otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'firebase-verify',
-          idToken,
-        }),
+        body: JSON.stringify({ action: 'login', phoneNumber, pin }),
       });
 
       const data = await response.json();
 
       if (data.success && data.session) {
-        const sessionData: SessionData = {
-          sessionId: data.session.sessionId,
-          phoneNumber: phoneNumber || '',
-          chatId: data.session.chatId,
-          anonymousName: data.session.anonymousName,
-          expiresAt: data.session.expiresAt,
-        };
-        
-        localStorage.setItem('dada_session', JSON.stringify(sessionData));
-        setSession(sessionData);
-        setChatInfo({ anonymousName: data.session.anonymousName });
-        setView('chat');
-        
-        // Add welcome message if new user
-        if (data.session.isNew) {
-          setMessages([{
-            id: 'welcome',
-            content: t.welcomeMessage,
-            isFromUser: false,
-            timestamp: new Date().toISOString(),
-          }]);
-        } else {
-          loadChatHistory(data.session.sessionId);
-        }
+        handleAuthSuccess(data.session);
+      } else if (data.needsPin) {
+        // Legacy user without PIN — redirect to set PIN
+        setIsLegacyUser(true);
+        setView('create-pin');
+        setPinCode(['', '', '', '']);
+        setConfirmPinCode(['', '', '', '']);
+        setIsConfirmingPin(false);
+        setError('');
+        setTimeout(() => pinRefs.current[0]?.focus(), 100);
       } else {
-        setError(data.error || t.invalidCode);
+        setError(data.error || t.invalidPin);
+        setPinCode(['', '', '', '']);
+        setTimeout(() => pinRefs.current[0]?.focus(), 100);
       }
-    } catch (err: unknown) {
-      console.error('OTP verification error:', err);
-      const firebaseError = err as { code?: string };
-      if (firebaseError.code === 'auth/invalid-verification-code') {
-        setError(t.invalidCode);
-      } else if (firebaseError.code === 'auth/code-expired') {
-        setError(lang === 'fr' ? 'Code expiré. Demande un nouveau code.' : 'Code expired. Please request a new one.');
-      } else {
-        setError(t.verificationFailed);
-      }
+    } catch {
+      setError(t.verificationFailed);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle PIN creation (new user or legacy user)
+  const handleCreatePin = async () => {
+    setError('');
+
+    if (!isConfirmingPin) {
+      // First entry — move to confirm
+      setIsConfirmingPin(true);
+      setConfirmPinCode(['', '', '', '']);
+      setTimeout(() => confirmPinRefs.current[0]?.focus(), 100);
+      return;
+    }
+
+    // Check PINs match
+    const pin = pinCode.join('');
+    const confirmPin = confirmPinCode.join('');
+
+    if (pin !== confirmPin) {
+      setError(t.pinMismatch);
+      setIsConfirmingPin(false);
+      setConfirmPinCode(['', '', '', '']);
+      setPinCode(['', '', '', '']);
+      setTimeout(() => pinRefs.current[0]?.focus(), 100);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const action = isLegacyUser ? 'set-pin' : 'register';
+      const response = await fetch('/api/auth/otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, phoneNumber, pin }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.session) {
+        handleAuthSuccess(data.session);
+      } else {
+        setError(data.error || t.failedOtp);
+      }
+    } catch {
+      setError(t.failedOtp);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Common auth success handler
+  const handleAuthSuccess = (sessionResponse: { sessionId: string; chatId: string; anonymousName: string; isNew: boolean; expiresAt: string }) => {
+    const sessionData: SessionData = {
+      sessionId: sessionResponse.sessionId,
+      phoneNumber: phoneNumber || '',
+      chatId: sessionResponse.chatId,
+      anonymousName: sessionResponse.anonymousName,
+      expiresAt: sessionResponse.expiresAt,
+    };
+    
+    localStorage.setItem('dada_session', JSON.stringify(sessionData));
+    setSession(sessionData);
+    setChatInfo({ anonymousName: sessionResponse.anonymousName });
+    setView('chat');
+    
+    if (sessionResponse.isNew) {
+      setMessages([{
+        id: 'welcome',
+        content: t.welcomeMessage,
+        isFromUser: false,
+        timestamp: new Date().toISOString(),
+      }]);
+    } else {
+      loadChatHistory(sessionResponse.sessionId);
     }
   };
 
@@ -648,8 +654,6 @@ export default function WebChatPage() {
 
   return (
     <div className="h-[100dvh] bg-cream-50 flex flex-col overflow-hidden">
-      {/* reCAPTCHA container moved into phone form */}
-      
       {/* Header — compact on mobile like WhatsApp */}
       <header className="bg-warm-brown text-white px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between flex-shrink-0 z-10 shadow-md">
         <div className="flex items-center gap-2.5">
@@ -741,14 +745,9 @@ export default function WebChatPage() {
                   <p className="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{error}</p>
                 )}
 
-                {/* reCAPTCHA checkbox */}
-                <div className="flex justify-center">
-                  <div id="recaptcha-container" />
-                </div>
-
                 <button
                   onClick={handleSendOTP}
-                  disabled={loading || !phoneNumber || phoneNumber.length < 8 || !recaptchaSolved}
+                  disabled={loading || !phoneNumber || phoneNumber.length < 8}
                   className="w-full py-3.5 bg-warm-brown text-white rounded-full font-semibold hover:bg-amber-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
                 >
                   {loading ? t.sending : t.continueBtn}
@@ -762,34 +761,34 @@ export default function WebChatPage() {
           </div>
         )}
 
-        {/* OTP View */}
-        {view === 'otp' && (
+        {/* PIN Login View (existing user) */}
+        {view === 'pin' && (
           <div className="flex-1 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
             <div className="bg-white rounded-2xl shadow-lg p-5 sm:p-8 w-full max-w-md border border-gray-100">
               <div className="text-center mb-5 sm:mb-8">
                 <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gold/20 flex items-center justify-center text-4xl mx-auto mb-3">
-                  📱
+                  🔐
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-playfair font-bold text-warm-brown mb-1.5">{t.checkPhone}</h2>
+                <h2 className="text-2xl sm:text-3xl font-playfair font-bold text-warm-brown mb-1.5">{t.enterPin}</h2>
                 <p className="text-gray-600 text-sm sm:text-base">
-                  {t.otpSubtitle}<br />
+                  {t.enterPinSubtitle}<br />
                   <span className="font-semibold text-earth">{phoneNumber}</span>
                 </p>
               </div>
 
               <div className="space-y-5">
-                <div className="flex justify-center gap-2 sm:gap-3">
-                  {otpCode.map((digit, index) => (
+                <div className="flex justify-center gap-3 sm:gap-4">
+                  {pinCode.map((digit, index) => (
                     <input
                       key={index}
-                      ref={(el) => { otpRefs.current[index] = el }}
-                      type="text"
+                      ref={(el) => { pinRefs.current[index] = el }}
+                      type="password"
                       inputMode="numeric"
                       maxLength={1}
                       value={digit}
-                      onChange={(e) => handleOtpChange(index, e.target.value)}
-                      onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                      className="w-10 h-12 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-bold border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-gold focus:border-gold"
+                      onChange={(e) => handlePinChange(index, e.target.value)}
+                      onKeyDown={(e) => handlePinKeyDown(index, e)}
+                      className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl sm:text-3xl font-bold border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-gold focus:border-gold"
                     />
                   ))}
                 </div>
@@ -799,15 +798,96 @@ export default function WebChatPage() {
                 )}
 
                 <button
-                  onClick={handleVerifyOTP}
-                  disabled={loading || otpCode.some(d => !d)}
+                  onClick={handlePinLogin}
+                  disabled={loading || pinCode.some(d => !d)}
                   className="w-full py-3.5 bg-warm-brown text-white rounded-full font-semibold hover:bg-amber-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
                 >
-                  {loading ? t.verifying : t.verifyBtn}
+                  {loading ? t.verifying : t.loginBtn}
                 </button>
 
                 <button
-                  onClick={() => setView('phone')}
+                  onClick={() => { setView('phone'); setError(''); }}
+                  className="w-full text-sm text-earth hover:text-warm-brown transition-colors"
+                >
+                  {t.differentNumber}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create PIN View (new user or legacy user) */}
+        {view === 'create-pin' && (
+          <div className="flex-1 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-lg p-5 sm:p-8 w-full max-w-md border border-gray-100">
+              <div className="text-center mb-5 sm:mb-8">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gold/20 flex items-center justify-center text-4xl mx-auto mb-3">
+                  {isLegacyUser ? '👋' : '✨'}
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-playfair font-bold text-warm-brown mb-1.5">
+                  {isLegacyUser ? t.setupPin : t.createPin}
+                </h2>
+                <p className="text-gray-600 text-sm sm:text-base">
+                  {isLegacyUser ? t.setupPinSubtitle : t.createPinSubtitle}<br />
+                  <span className="font-semibold text-earth">{phoneNumber}</span>
+                </p>
+              </div>
+
+              <div className="space-y-5">
+                {!isConfirmingPin ? (
+                  <>
+                    <label className="block text-sm font-medium text-earth text-center">{t.pinLabel}</label>
+                    <div className="flex justify-center gap-3 sm:gap-4">
+                      {pinCode.map((digit, index) => (
+                        <input
+                          key={index}
+                          ref={(el) => { pinRefs.current[index] = el }}
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={1}
+                          value={digit}
+                          onChange={(e) => handlePinChange(index, e.target.value)}
+                          onKeyDown={(e) => handlePinKeyDown(index, e)}
+                          className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl sm:text-3xl font-bold border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-gold focus:border-gold"
+                        />
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-sm font-medium text-earth text-center">{t.confirmPin}</label>
+                    <div className="flex justify-center gap-3 sm:gap-4">
+                      {confirmPinCode.map((digit, index) => (
+                        <input
+                          key={`confirm-${index}`}
+                          ref={(el) => { confirmPinRefs.current[index] = el }}
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={1}
+                          value={digit}
+                          onChange={(e) => handlePinChange(index, e.target.value, true)}
+                          onKeyDown={(e) => handlePinKeyDown(index, e, true)}
+                          className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl sm:text-3xl font-bold border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-gold focus:border-gold"
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {error && (
+                  <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-lg">{error}</p>
+                )}
+
+                <button
+                  onClick={handleCreatePin}
+                  disabled={loading || (isConfirmingPin ? confirmPinCode.some(d => !d) : pinCode.some(d => !d))}
+                  className="w-full py-3.5 bg-warm-brown text-white rounded-full font-semibold hover:bg-amber-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
+                >
+                  {loading ? t.verifying : (isConfirmingPin ? t.startChatBtn : t.continueBtn)}
+                </button>
+
+                <button
+                  onClick={() => { setView('phone'); setError(''); setIsConfirmingPin(false); }}
                   className="w-full text-sm text-earth hover:text-warm-brown transition-colors"
                 >
                   {t.differentNumber}

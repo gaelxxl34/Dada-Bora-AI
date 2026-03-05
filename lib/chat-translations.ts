@@ -15,16 +15,28 @@ export const chatTranslations = {
     greeting: 'Hey, Queen! 👋',
     phoneSubtitle: "I'm Dada Bora, the big sister you wish you had. Let's connect so I can remember our conversations.",
     phoneLabel: 'Your Phone Number',
-    sending: 'Sending...',
+    sending: 'Loading...',
     continueBtn: 'Continue 💛',
-    phoneDisclaimer: "We'll send you a verification code. Your conversations are private and secure.",
+    phoneDisclaimer: "You'll create a secure PIN to protect your conversations.",
 
-    // OTP view
-    checkPhone: 'Check Your Phone',
-    otpSubtitle: 'Enter the 6-digit code sent to',
+    // PIN view
+    createPin: 'Create Your PIN',
+    createPinSubtitle: 'Choose a 4-digit PIN to secure your conversations.',
+    enterPin: 'Enter Your PIN',
+    enterPinSubtitle: 'Enter your 4-digit PIN to access your conversations.',
+    confirmPin: 'Confirm PIN',
+    pinLabel: 'Your 4-digit PIN',
+    pinMismatch: 'PINs do not match. Please try again.',
     verifying: 'Verifying...',
-    verifyBtn: 'Verify & Start Chat 💛',
+    startChatBtn: 'Start Chatting 💛',
+    loginBtn: 'Login 💛',
     differentNumber: '← Use a different number',
+    forgotPin: 'Forgot PIN?',
+    forgotPinMsg: 'Contact support to reset your PIN.',
+
+    // Legacy OTP user
+    setupPin: 'Set Up Your PIN',
+    setupPinSubtitle: 'Welcome back! We\'ve upgraded to PIN-based login. Please create a 4-digit PIN for your account.',
 
     // Chat view
     messagePlaceholder: 'Message...',
@@ -43,11 +55,14 @@ export const chatTranslations = {
     poweredBy: 'Powered by',
 
     // Errors
-    sessionExpired: 'Your session has expired. Please verify your phone number again.',
+    sessionExpired: 'Your session has expired. Please log in again.',
     failedSend: 'Failed to send message. Please try again.',
-    failedOtp: 'Failed to send verification code. Please try again.',
+    failedOtp: 'Something went wrong. Please try again.',
     verificationFailed: 'Verification failed. Please try again.',
-    invalidCode: 'Invalid verification code',
+    invalidCode: 'Incorrect PIN. Please try again.',
+    invalidPin: 'Incorrect PIN. Please try again.',
+    phoneRegistered: 'This number is already registered. Please enter your PIN.',
+    phoneNotFound: 'No account found with this number. Please register first.',
     micBlocked: 'Microphone is blocked for this site. To fix:\n1. Tap the lock/info icon in your browser address bar\n2. Find "Microphone" and set it to "Allow"\n3. Reload this page\nOn Mac: also check System Settings → Privacy & Security → Microphone → allow your browser.',
     micDenied: 'Microphone access was denied. To fix:\n1. Tap the lock/info icon in your browser address bar\n2. Find "Microphone" and set it to "Allow"\n3. Reload this page\nOn Mac: also check System Settings → Privacy & Security → Microphone → allow your browser.',
     noMic: 'No microphone detected. Please connect a microphone and try again.',
@@ -63,16 +78,28 @@ export const chatTranslations = {
     greeting: 'Hey, ma belle ! 👋',
     phoneSubtitle: "Je suis Dada Bora, la grande sœur que tu aurais aimé avoir. Connectons-nous pour que je puisse me souvenir de nos conversations.",
     phoneLabel: 'Ton numéro de téléphone',
-    sending: 'Envoi...',
+    sending: 'Chargement...',
     continueBtn: 'Continuer 💛',
-    phoneDisclaimer: "Nous t'enverrons un code de vérification. Tes conversations sont privées et sécurisées.",
+    phoneDisclaimer: "Tu vas créer un code PIN sécurisé pour protéger tes conversations.",
 
-    // OTP view
-    checkPhone: 'Vérifie ton téléphone',
-    otpSubtitle: 'Entre le code à 6 chiffres envoyé au',
+    // PIN view
+    createPin: 'Crée ton PIN',
+    createPinSubtitle: 'Choisis un code PIN à 4 chiffres pour sécuriser tes conversations.',
+    enterPin: 'Entre ton PIN',
+    enterPinSubtitle: 'Entre ton code PIN à 4 chiffres pour accéder à tes conversations.',
+    confirmPin: 'Confirme le PIN',
+    pinLabel: 'Ton code PIN à 4 chiffres',
+    pinMismatch: 'Les PINs ne correspondent pas. Réessaie.',
     verifying: 'Vérification...',
-    verifyBtn: 'Vérifier & Commencer 💛',
+    startChatBtn: 'Commencer à discuter 💛',
+    loginBtn: 'Se connecter 💛',
     differentNumber: '← Utiliser un autre numéro',
+    forgotPin: 'PIN oublié ?',
+    forgotPinMsg: 'Contacte le support pour réinitialiser ton PIN.',
+
+    // Legacy OTP user
+    setupPin: 'Configure ton PIN',
+    setupPinSubtitle: 'Bon retour ! Nous sommes passés à la connexion par PIN. Crée un code PIN à 4 chiffres pour ton compte.',
 
     // Chat view
     messagePlaceholder: 'Message...',
@@ -91,11 +118,14 @@ export const chatTranslations = {
     poweredBy: 'Propulsé par',
 
     // Errors
-    sessionExpired: 'Ta session a expiré. Vérifie à nouveau ton numéro de téléphone.',
+    sessionExpired: 'Ta session a expiré. Reconnecte-toi.',
     failedSend: "L'envoi du message a échoué. Réessaie.",
-    failedOtp: "L'envoi du code de vérification a échoué. Réessaie.",
+    failedOtp: "Quelque chose s'est mal passé. Réessaie.",
     verificationFailed: 'La vérification a échoué. Réessaie.',
-    invalidCode: 'Code de vérification invalide',
+    invalidCode: 'Code PIN incorrect. Réessaie.',
+    invalidPin: 'Code PIN incorrect. Réessaie.',
+    phoneRegistered: 'Ce numéro est déjà enregistré. Entre ton PIN.',
+    phoneNotFound: 'Aucun compte trouvé avec ce numéro. Inscris-toi d\'abord.',
     micBlocked: "Le microphone est bloqué pour ce site. Pour corriger :\n1. Appuie sur l'icône de cadenas dans la barre d'adresse\n2. Trouve \"Microphone\" et mets-le sur \"Autoriser\"\n3. Recharge cette page",
     micDenied: "L'accès au microphone a été refusé. Pour corriger :\n1. Appuie sur l'icône de cadenas dans la barre d'adresse\n2. Trouve \"Microphone\" et mets-le sur \"Autoriser\"\n3. Recharge cette page",
     noMic: 'Aucun microphone détecté. Connecte un microphone et réessaie.',
