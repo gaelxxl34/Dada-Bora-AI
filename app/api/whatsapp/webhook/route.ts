@@ -172,47 +172,43 @@ async function getAIResponse(
       crisisContext || ''
     );
 
-    if (provider === 'openai' && openaiApiKey) {
+    // Helper: call OpenAI
+    const callOpenAI = async (useModel: string): Promise<{ response: string; tokensUsed: number } | null> => {
+      if (!openaiApiKey) return null;
       const messages = [
         { role: 'system', content: enhancedSystemPrompt },
         ...chatHistory,
         { role: 'user', content: userMessage }
       ];
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openaiApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: model || 'gpt-4o',
+          model: useModel,
           messages,
-          // Use lower temperature during crisis for more focused responses
           temperature: isCrisis ? 0.5 : (temperature || 0.7),
           max_tokens: maxTokens || 500,
         }),
       });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
+      const data = await res.json();
+      if (!res.ok) {
         console.error('OpenAI API Error:', data);
-        return { response: '', tokensUsed: 0 };
+        return null;
       }
-      
-      // Track actual token usage
-      const tokensUsed = data.usage?.total_tokens || 0;
+      return { response: data.choices?.[0]?.message?.content || '', tokensUsed: data.usage?.total_tokens || 0 };
+    };
 
-      return { response: data.choices?.[0]?.message?.content || '', tokensUsed };
-
-    } else if (provider === 'anthropic' && anthropicApiKey) {
+    // Helper: call Anthropic
+    const callAnthropic = async (useModel: string): Promise<{ response: string; tokensUsed: number } | null> => {
+      if (!anthropicApiKey) return null;
       const messages = [
         ...chatHistory.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
         { role: 'user' as const, content: userMessage }
       ];
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'x-api-key': anthropicApiKey,
@@ -220,24 +216,38 @@ async function getAIResponse(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: model || 'claude-3-opus-20240229',
+          model: useModel,
           max_tokens: maxTokens || 500,
           system: enhancedSystemPrompt,
           messages,
         }),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
+      const data = await res.json();
+      if (!res.ok) {
         console.error('Anthropic API Error:', data);
-        return { response: '', tokensUsed: 0 };
+        return null;
       }
-      
-      // Anthropic usage tracking
       const tokensUsed = (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
-
       return { response: data.content?.[0]?.text || '', tokensUsed };
+    };
+
+    // Try primary provider, then fallback to the other
+    if (provider === 'openai') {
+      const result = await callOpenAI(model || 'gpt-4o');
+      if (result && result.response) return result;
+      if (anthropicApiKey) {
+        console.warn('⚠️ OpenAI failed, falling back to Anthropic');
+        const fallback = await callAnthropic('claude-sonnet-4-20250514');
+        if (fallback && fallback.response) return fallback;
+      }
+    } else if (provider === 'anthropic') {
+      const result = await callAnthropic(model || 'claude-sonnet-4-20250514');
+      if (result && result.response) return result;
+      if (openaiApiKey) {
+        console.warn('⚠️ Anthropic failed, falling back to OpenAI');
+        const fallback = await callOpenAI('gpt-4o');
+        if (fallback && fallback.response) return fallback;
+      }
     }
 
     return { response: '', tokensUsed: 0 };

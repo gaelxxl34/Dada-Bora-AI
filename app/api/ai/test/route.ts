@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: model || 'claude-3-opus-20240229',
+          model: model || 'claude-sonnet-4-20250514',
           max_tokens: maxTokens || 500,
           system: enhancedSystemPrompt,
           messages: [

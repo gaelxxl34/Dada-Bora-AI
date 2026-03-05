@@ -123,6 +123,13 @@ export default function ChatbotSettingsPage() {
         
         if (docSnap.exists()) {
           const data = docSnap.data() as ChatbotConfig;
+          // Validate stored model is still a valid option
+          const validOpenAIModels = ['gpt-4o', 'gpt-4o-mini', 'o3-mini'];
+          const validAnthropicModels = ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'];
+          const validModels = data.provider === 'openai' ? validOpenAIModels : validAnthropicModels;
+          if (!validModels.includes(data.model)) {
+            data.model = data.provider === 'openai' ? 'gpt-4o' : 'claude-sonnet-4-20250514';
+          }
           setConfig(data);
         }
 
@@ -282,7 +289,7 @@ export default function ChatbotSettingsPage() {
             
             <div className="grid grid-cols-2 gap-4 mb-6">
               <button
-                onClick={() => setConfig({ ...config, provider: 'openai', model: 'gpt-4o' })}
+                onClick={() => setConfig(prev => ({ ...prev, provider: 'openai', model: 'gpt-4o' }))}
                 className={`p-4 rounded-lg border-2 transition-all ${
                   config.provider === 'openai'
                     ? 'border-warm-brown bg-cream-50'
@@ -305,7 +312,7 @@ export default function ChatbotSettingsPage() {
               </button>
 
               <button
-                onClick={() => setConfig({ ...config, provider: 'anthropic', model: 'claude-3-opus-20240229' })}
+                onClick={() => setConfig(prev => ({ ...prev, provider: 'anthropic', model: 'claude-sonnet-4-20250514' }))}
                 className={`p-4 rounded-lg border-2 transition-all ${
                   config.provider === 'anthropic'
                     ? 'border-warm-brown bg-cream-50'
@@ -392,7 +399,7 @@ export default function ChatbotSettingsPage() {
                     <>
                       <option value="gpt-4o">GPT-4o (Recommended)</option>
                       <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cheap)</option>
-                      <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                      <option value="o3-mini">O3 Mini (Reasoning)</option>
                     </>
                   ) : (
                     <>

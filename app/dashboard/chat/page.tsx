@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
 
 interface Message {
@@ -27,6 +28,11 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const { user, userProfile } = useAuth();
+  const isSuperAdmin = userProfile?.role === 'super_admin';
 
   // Load all chats
   useEffect(() => {
@@ -96,6 +102,38 @@ export default function ChatPage() {
     if (!timestamp) return '';
     const date = timestamp.toDate();
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!selectedChat || !user) return;
+
+    setDeleting(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/chat/delete', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ chatId: selectedChat }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setChats(prev => prev.filter(c => c.id !== selectedChat));
+        setSelectedChat(null);
+        setMessages([]);
+        setShowDeleteConfirm(false);
+      } else {
+        alert(data.error || 'Failed to delete conversation');
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('An error occurred while deleting the conversation');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -181,12 +219,21 @@ export default function ChatPage() {
                       {chats.find(c => c.id === selectedChat)?.anonymousName.charAt(0)}
                     </span>
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h2 className="font-semibold text-gray-900">
                       {chats.find(c => c.id === selectedChat)?.anonymousName}
                     </h2>
                     <p className="text-xs text-gray-500">WhatsApp User</p>
                   </div>
+                  {isSuperAdmin && (
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="ml-auto p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete conversation &amp; all user data"
+                    >
+                      <i className="ri-delete-bin-line text-xl" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -249,6 +296,61 @@ export default function ChatPage() {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <i className="ri-error-warning-line text-red-600 text-xl" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Delete Everything</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-2">
+              This will <strong>permanently delete</strong>:
+            </p>
+            <ul className="text-sm text-gray-600 list-disc list-inside mb-4 space-y-1">
+              <li>All messages in this conversation</li>
+              <li>User profile &amp; personal information</li>
+              <li>Web sessions</li>
+              <li>Crisis alerts</li>
+              <li>Token usage records</li>
+              <li>OTP logs</li>
+              <li>All related conversations from this user</li>
+            </ul>
+            <p className="text-xs text-red-600 font-medium mb-6">
+              This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConversation}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2"
+              >
+                {deleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-delete-bin-line" />
+                    Delete Everything
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

@@ -63,7 +63,18 @@ async function getAIResponse(
       return { response: '', tokensUsed: 0 };
     }
 
-    const { provider, openaiApiKey, anthropicApiKey, model, temperature, maxTokens } = config;
+    const { provider, openaiApiKey, anthropicApiKey, temperature, maxTokens } = config;
+    // Validate model - fall back to current defaults if stored model is deprecated
+    const validOpenAIModels = ['gpt-4o', 'gpt-4o-mini', 'o3-mini'];
+    const validAnthropicModels = ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'];
+    let model = config.model;
+    if (provider === 'openai' && !validOpenAIModels.includes(model)) {
+      console.warn(`⚠️ Stored model '${model}' is deprecated, falling back to 'gpt-4o'`);
+      model = 'gpt-4o';
+    } else if (provider === 'anthropic' && !validAnthropicModels.includes(model)) {
+      console.warn(`⚠️ Stored model '${model}' is deprecated, falling back to 'claude-sonnet-4-20250514'`);
+      model = 'claude-sonnet-4-20250514';
+    }
     console.log('🤖 AI config:', { provider, model, hasOpenAIKey: !!openaiApiKey, hasAnthropicKey: !!anthropicApiKey });
 
     // Fetch relevant knowledge
@@ -93,45 +104,44 @@ async function getAIResponse(
       crisisContext
     ) + getLanguageInstruction(language);
 
-    if (provider === 'openai' && openaiApiKey) {
+    // Helper: call OpenAI
+    const callOpenAI = async (useModel: string): Promise<{ response: string; tokensUsed: number } | null> => {
+      if (!openaiApiKey) return null;
       const messages = [
         { role: 'system', content: enhancedSystemPrompt },
         ...chatHistory,
         { role: 'user', content: userMessage }
       ];
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openaiApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: model || 'gpt-4o',
+          model: useModel,
           messages,
           temperature: isCrisis ? 0.5 : (temperature || 0.7),
           max_tokens: maxTokens || 500,
         }),
       });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        console.error('❌ OpenAI API Error:', response.status, JSON.stringify(data));
-        return { response: '', tokensUsed: 0 };
+      const data = await res.json();
+      if (!res.ok) {
+        console.error('❌ OpenAI API Error:', res.status, JSON.stringify(data));
+        return null;
       }
-      
       console.log('✅ OpenAI response received, tokens:', data.usage?.total_tokens);
-      const tokensUsed = data.usage?.total_tokens || 0;
-      return { response: data.choices?.[0]?.message?.content || '', tokensUsed };
+      return { response: data.choices?.[0]?.message?.content || '', tokensUsed: data.usage?.total_tokens || 0 };
+    };
 
-    } else if (provider === 'anthropic' && anthropicApiKey) {
+    // Helper: call Anthropic
+    const callAnthropic = async (useModel: string): Promise<{ response: string; tokensUsed: number } | null> => {
+      if (!anthropicApiKey) return null;
       const messages = [
         ...chatHistory.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
         { role: 'user' as const, content: userMessage }
       ];
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'x-api-key': anthropicApiKey,
@@ -139,26 +149,44 @@ async function getAIResponse(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: model || 'claude-3-opus-20240229',
+          model: useModel,
           max_tokens: maxTokens || 500,
           system: enhancedSystemPrompt,
           messages,
         }),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error('❌ Anthropic API Error:', response.status, JSON.stringify(data));
-        return { response: '', tokensUsed: 0 };
+      const data = await res.json();
+      if (!res.ok) {
+        console.error('❌ Anthropic API Error:', res.status, JSON.stringify(data));
+        return null;
       }
-      
       console.log('✅ Anthropic response received');
       const tokensUsed = (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
       return { response: data.content?.[0]?.text || '', tokensUsed };
+    };
+
+    // Try primary provider, then fallback to the other
+    if (provider === 'openai') {
+      const result = await callOpenAI(model || 'gpt-4o');
+      if (result && result.response) return result;
+      // Fallback to Anthropic
+      if (anthropicApiKey) {
+        console.warn('⚠️ OpenAI failed, falling back to Anthropic');
+        const fallback = await callAnthropic('claude-sonnet-4-20250514');
+        if (fallback && fallback.response) return fallback;
+      }
+    } else if (provider === 'anthropic') {
+      const result = await callAnthropic(model || 'claude-sonnet-4-20250514');
+      if (result && result.response) return result;
+      // Fallback to OpenAI
+      if (openaiApiKey) {
+        console.warn('⚠️ Anthropic failed, falling back to OpenAI');
+        const fallback = await callOpenAI('gpt-4o');
+        if (fallback && fallback.response) return fallback;
+      }
     }
 
-    console.error('❌ No matching AI provider found. Provider:', provider, 'Has keys:', { openai: !!openaiApiKey, anthropic: !!anthropicApiKey });
+    console.error('❌ All AI providers failed. Provider:', provider, 'Has keys:', { openai: !!openaiApiKey, anthropic: !!anthropicApiKey });
     return { response: '', tokensUsed: 0 };
   } catch (error) {
     console.error('Error getting AI response:', error);
