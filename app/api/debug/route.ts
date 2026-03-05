@@ -241,7 +241,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: model || 'gpt-4-turbo-preview',
+            model: model || 'gpt-4o',
             messages: [{ role: 'user', content: 'Say "test successful" in exactly 2 words.' }],
             max_tokens: 10,
           }),

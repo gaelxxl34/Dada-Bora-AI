@@ -2,9 +2,23 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import PhoneInput from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 import { chatTranslations, detectBrowserLanguage, type ChatLanguage } from '@/lib/chat-translations';
+
+// Dynamically import AR viewer — client-side only (camera, WebXR, model-viewer)
+const DadaBoraARViewer = dynamic(() => import('@/components/DadaBoraARViewer'), {
+  ssr: false,
+  loading: () => (
+    <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-16 h-16 border-4 border-gold/30 border-t-gold rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-white text-lg">Loading AR Experience...</p>
+      </div>
+    </div>
+  ),
+});
 
 // Types
 interface Message {
@@ -40,6 +54,9 @@ export default function WebChatPage() {
   const [error, setError] = useState('');
   const [chatInfo, setChatInfo] = useState<{anonymousName?: string; location?: {country?: string}} | null>(null);
   
+  // AR state
+  const [arActive, setArActive] = useState(false);
+
   // Voice state
   const [isRecording, setIsRecording] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -370,28 +387,38 @@ export default function WebChatPage() {
     }
   };
 
-  // Send OTP via Firebase Phone Auth
-  const handleSendOTP = async () => {
+  // Check phone and route to PIN or Create PIN view
+  const handleCheckPhone = async () => {
     setError('');
     setLoading(true);
 
     try {
-      // Check if phone number already has an account
       const response = await fetch('/api/auth/otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'check-phone', phoneNumber }),
       });
+
       const data = await response.json();
 
       if (data.exists) {
-        // Existing user → go to login PIN view
-        setView('pin');
-        setIsLegacyUser(false);
-        setPinCode(['', '', '', '']);
-        setTimeout(() => pinRefs.current[0]?.focus(), 100);
+        if (data.hasPin) {
+          // Existing user with PIN — go to PIN login
+          setView('pin');
+          setPinCode(['', '', '', '']);
+          setTimeout(() => pinRefs.current[0]?.focus(), 100);
+        } else {
+          // Legacy user without PIN — set up PIN
+          setIsLegacyUser(true);
+          setView('create-pin');
+          setPinCode(['', '', '', '']);
+          setConfirmPinCode(['', '', '', '']);
+          setIsConfirmingPin(false);
+          setTimeout(() => pinRefs.current[0]?.focus(), 100);
+        }
       } else {
-        // New user → go to create PIN view
+        // New user — create account with PIN
+        setIsLegacyUser(false);
         setView('create-pin');
         setPinCode(['', '', '', '']);
         setConfirmPinCode(['', '', '', '']);
@@ -408,35 +435,29 @@ export default function WebChatPage() {
   // Handle PIN input
   const handlePinChange = (index: number, value: string, isConfirm = false) => {
     if (!/^\d*$/.test(value)) return;
-
-    if (isConfirm) {
-      const newPin = [...confirmPinCode];
+    const refs = isConfirm ? confirmPinRefs : pinRefs;
+    const setter = isConfirm ? setConfirmPinCode : setPinCode;
+    setter(prev => {
+      const newPin = [...prev];
       newPin[index] = value.slice(-1);
-      setConfirmPinCode(newPin);
-      if (value && index < 3) {
-        confirmPinRefs.current[index + 1]?.focus();
-      }
-    } else {
-      const newPin = [...pinCode];
-      newPin[index] = value.slice(-1);
-      setPinCode(newPin);
-      if (value && index < 3) {
-        pinRefs.current[index + 1]?.focus();
-      }
+      return newPin;
+    });
+    if (value && index < 3) {
+      refs.current[index + 1]?.focus();
     }
   };
 
   const handlePinKeyDown = (index: number, e: React.KeyboardEvent, isConfirm = false) => {
+    const refs = isConfirm ? confirmPinRefs : pinRefs;
     if (e.key === 'Backspace' && index > 0) {
-      if (isConfirm) {
-        if (!confirmPinCode[index]) confirmPinRefs.current[index - 1]?.focus();
-      } else {
-        if (!pinCode[index]) pinRefs.current[index - 1]?.focus();
+      const code = isConfirm ? confirmPinCode : pinCode;
+      if (!code[index]) {
+        refs.current[index - 1]?.focus();
       }
     }
   };
 
-  // Handle PIN login (existing user)
+  // Login with PIN
   const handlePinLogin = async () => {
     setError('');
     setLoading(true);
@@ -454,19 +475,12 @@ export default function WebChatPage() {
 
       if (data.success && data.session) {
         handleAuthSuccess(data.session);
-      } else if (data.needsPin) {
-        // Legacy user without PIN — redirect to set PIN
-        setIsLegacyUser(true);
-        setView('create-pin');
+      } else if (data.error === 'INVALID_PIN') {
+        setError(t.invalidPin);
         setPinCode(['', '', '', '']);
-        setConfirmPinCode(['', '', '', '']);
-        setIsConfirmingPin(false);
-        setError('');
         setTimeout(() => pinRefs.current[0]?.focus(), 100);
       } else {
-        setError(data.error || t.invalidPin);
-        setPinCode(['', '', '', '']);
-        setTimeout(() => pinRefs.current[0]?.focus(), 100);
+        setError(data.error || t.verificationFailed);
       }
     } catch {
       setError(t.verificationFailed);
@@ -475,7 +489,7 @@ export default function WebChatPage() {
     }
   };
 
-  // Handle PIN creation (new user or legacy user)
+  // Create PIN (new user or legacy user)
   const handleCreatePin = async () => {
     setError('');
 
@@ -493,10 +507,8 @@ export default function WebChatPage() {
 
     if (pin !== confirmPin) {
       setError(t.pinMismatch);
-      setIsConfirmingPin(false);
       setConfirmPinCode(['', '', '', '']);
-      setPinCode(['', '', '', '']);
-      setTimeout(() => pinRefs.current[0]?.focus(), 100);
+      setTimeout(() => confirmPinRefs.current[0]?.focus(), 100);
       return;
     }
 
@@ -514,11 +526,13 @@ export default function WebChatPage() {
 
       if (data.success && data.session) {
         handleAuthSuccess(data.session);
+      } else if (data.error === 'PHONE_ALREADY_REGISTERED') {
+        setError(t.phoneRegistered);
       } else {
-        setError(data.error || t.failedOtp);
+        setError(data.error || t.verificationFailed);
       }
     } catch {
-      setError(t.failedOtp);
+      setError(t.verificationFailed);
     } finally {
       setLoading(false);
     }
@@ -687,6 +701,18 @@ export default function WebChatPage() {
         <div className="flex items-center gap-2 flex-shrink-0">
           {session && (
             <button
+              onClick={() => setArActive(true)}
+              className="p-1.5 text-gold/80 hover:text-gold transition-colors"
+              title="Meet Dada Bora in AR"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+              </svg>
+            </button>
+          )}
+          {session && (
+            <button
               onClick={handleLogout}
               className="text-xs sm:text-sm text-white/80 hover:text-white transition-colors px-2.5 py-1 rounded-full border border-white/30 hover:border-white/60 hidden sm:block"
             >
@@ -746,7 +772,7 @@ export default function WebChatPage() {
                 )}
 
                 <button
-                  onClick={handleSendOTP}
+                  onClick={handleCheckPhone}
                   disabled={loading || !phoneNumber || phoneNumber.length < 8}
                   className="w-full py-3.5 bg-warm-brown text-white rounded-full font-semibold hover:bg-amber-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
                 >
@@ -761,7 +787,7 @@ export default function WebChatPage() {
           </div>
         )}
 
-        {/* PIN Login View (existing user) */}
+        {/* PIN Login View */}
         {view === 'pin' && (
           <div className="flex-1 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
             <div className="bg-white rounded-2xl shadow-lg p-5 sm:p-8 w-full max-w-md border border-gray-100">
@@ -777,6 +803,7 @@ export default function WebChatPage() {
               </div>
 
               <div className="space-y-5">
+                <label className="block text-sm font-medium text-earth text-center">{t.pinLabel}</label>
                 <div className="flex justify-center gap-3 sm:gap-4">
                   {pinCode.map((digit, index) => (
                     <input
@@ -806,7 +833,7 @@ export default function WebChatPage() {
                 </button>
 
                 <button
-                  onClick={() => { setView('phone'); setError(''); }}
+                  onClick={() => { setView('phone'); setError(''); setPinCode(['', '', '', '']); }}
                   className="w-full text-sm text-earth hover:text-warm-brown transition-colors"
                 >
                   {t.differentNumber}
@@ -816,20 +843,19 @@ export default function WebChatPage() {
           </div>
         )}
 
-        {/* Create PIN View (new user or legacy user) */}
+        {/* Create PIN View */}
         {view === 'create-pin' && (
           <div className="flex-1 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
             <div className="bg-white rounded-2xl shadow-lg p-5 sm:p-8 w-full max-w-md border border-gray-100">
               <div className="text-center mb-5 sm:mb-8">
                 <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gold/20 flex items-center justify-center text-4xl mx-auto mb-3">
-                  {isLegacyUser ? '👋' : '✨'}
+                  {isConfirmingPin ? '✅' : '🔑'}
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-playfair font-bold text-warm-brown mb-1.5">
-                  {isLegacyUser ? t.setupPin : t.createPin}
+                  {isConfirmingPin ? t.confirmPin : (isLegacyUser ? t.setupPin : t.createPin)}
                 </h2>
                 <p className="text-gray-600 text-sm sm:text-base">
-                  {isLegacyUser ? t.setupPinSubtitle : t.createPinSubtitle}<br />
-                  <span className="font-semibold text-earth">{phoneNumber}</span>
+                  {isConfirmingPin ? t.confirmPin : (isLegacyUser ? t.setupPinSubtitle : t.createPinSubtitle)}
                 </p>
               </div>
 
@@ -887,7 +913,13 @@ export default function WebChatPage() {
                 </button>
 
                 <button
-                  onClick={() => { setView('phone'); setError(''); setIsConfirmingPin(false); }}
+                  onClick={() => { 
+                    setView('phone'); 
+                    setError(''); 
+                    setPinCode(['', '', '', '']); 
+                    setConfirmPinCode(['', '', '', '']);
+                    setIsConfirmingPin(false);
+                  }}
                   className="w-full text-sm text-earth hover:text-warm-brown transition-colors"
                 >
                   {t.differentNumber}
@@ -1143,6 +1175,12 @@ export default function WebChatPage() {
           </p>
         </footer>
       )}
+
+      {/* AR Overlay — only available when user has an active session */}
+      {arActive && session && (
+        <DadaBoraARViewer onClose={() => setArActive(false)} sessionId={session.sessionId} />
+      )}
+
     </div>
   );
 }

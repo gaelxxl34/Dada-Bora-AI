@@ -1,6 +1,11 @@
 {
   "dependencies": {
+    "@google/model-viewer": "^4.1.0",
     "@react-google-maps/api": "^2.19.3",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.5.0",
+    "@react-three/xr": "^6.6.29",
+    "@types/three": "^0.183.1",
     "dotenv": "^17.2.3",
     "firebase": "^12.8.0",
     "firebase-admin": "^13.6.0",
@@ -10,6 +15,7 @@
     "react-dom": "^19.0.0",
     "react-phone-number-input": "^3.4.16",
     "recharts": "^3.0.2",
+    "three": "^0.172.0",
     "twilio": "^5.12.0"
   },
   "devDependencies": {

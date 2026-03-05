@@ -186,7 +186,7 @@ async function getAIResponse(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: model || 'gpt-4-turbo-preview',
+          model: model || 'gpt-4o',
           messages,
           // Use lower temperature during crisis for more focused responses
           temperature: isCrisis ? 0.5 : (temperature || 0.7),

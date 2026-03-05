@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: model || 'gpt-4-turbo-preview',
+          model: model || 'gpt-4o',
           messages: [
             { role: 'system', content: enhancedSystemPrompt },
             { role: 'user', content: testMessage }
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         provider: 'openai',
-        model: model || 'gpt-4-turbo-preview',
+        model: model || 'gpt-4o',
         status: 'connected',
         testMessage,
         response: aiResponse,

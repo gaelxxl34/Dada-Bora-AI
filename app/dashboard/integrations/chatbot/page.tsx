@@ -94,7 +94,7 @@ export default function ChatbotSettingsPage() {
     temperature: 0.7,
     maxTokens: 1000,
     enabled: false,
-    model: 'gpt-4-turbo-preview',
+    model: 'gpt-4o',
   });
   const [savedMessage, setSavedMessage] = useState('');
   
@@ -282,7 +282,7 @@ export default function ChatbotSettingsPage() {
             
             <div className="grid grid-cols-2 gap-4 mb-6">
               <button
-                onClick={() => setConfig({ ...config, provider: 'openai', model: 'gpt-4-turbo-preview' })}
+                onClick={() => setConfig({ ...config, provider: 'openai', model: 'gpt-4o' })}
                 className={`p-4 rounded-lg border-2 transition-all ${
                   config.provider === 'openai'
                     ? 'border-warm-brown bg-cream-50'
@@ -390,15 +390,15 @@ export default function ChatbotSettingsPage() {
                 >
                   {config.provider === 'openai' ? (
                     <>
-                      <option value="gpt-4-turbo-preview">GPT-4 Turbo (Recommended)</option>
-                      <option value="gpt-4">GPT-4</option>
-                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                      <option value="gpt-4o">GPT-4o (Recommended)</option>
+                      <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cheap)</option>
+                      <option value="gpt-4-turbo">GPT-4 Turbo</option>
                     </>
                   ) : (
                     <>
-                      <option value="claude-3-opus-20240229">Claude 3 Opus (Most Capable)</option>
-                      <option value="claude-3-sonnet-20240229">Claude 3 Sonnet (Balanced)</option>
-                      <option value="claude-3-haiku-20240307">Claude 3 Haiku (Fast)</option>
+                      <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (Recommended)</option>
+                      <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (Balanced)</option>
+                      <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Fast)</option>
                     </>
                   )}
                 </select>

@@ -1,13 +1,39 @@
 /**
  * API Routes for Phone + PIN Authentication
- * Handles user registration, login, and session management for web chat
+ * Handles phone check, registration, login, PIN setup, session management
+ * 
+ * Flow for new users:
+ * 1. check-phone → not found → create-pin view
+ * 2. register (phone + pin) → session created
+ * 
+ * Flow for returning users:
+ * 1. check-phone → found → pin view
+ * 2. login (phone + pin) → session created
+ * 
+ * Flow for legacy users (no PIN):
+ * 1. check-phone → found but no PIN → create-pin view
+ * 2. set-pin (phone + pin) → session created
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { validateSession, endSession, checkPhoneExists, registerWithPin, loginWithPin, setPinForExistingUser } from '@/lib/pin-auth';
+import { checkPhoneExists, registerWithPin, loginWithPin, setPinForExistingUser, validateSession, endSession } from '@/lib/pin-auth';
 import { applyRateLimit } from '@/lib/auth-middleware';
+import { adminDb } from '@/lib/firebase-admin';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Simple hash function for phone numbers (matches the one in pin-auth)
+ */
+function hashPhone(phoneNumber: string): string {
+  let hash = 0;
+  for (let i = 0; i < phoneNumber.length; i++) {
+    const char = phoneNumber.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return `hash_${Math.abs(hash).toString(36)}`;
+}
 
 /**
  * POST /api/auth/otp
@@ -26,105 +52,116 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'check-phone': {
-        // Check if phone number already has an account
         if (!phoneNumber) {
           return NextResponse.json({ error: 'Phone number is required' }, { status: 400 });
         }
 
-        const result = await checkPhoneExists(phoneNumber);
-        return NextResponse.json({ exists: result.exists });
+        const { exists } = await checkPhoneExists(phoneNumber);
+        
+        // Check if existing user has a PIN set
+        let hasPin = false;
+        if (exists) {
+          const phoneHash = hashPhone(phoneNumber);
+          const chatDocs = await adminDb.collection('chats')
+            .where('phoneNumberHash', '==', phoneHash)
+            .limit(1)
+            .get();
+          if (!chatDocs.empty) {
+            const data = chatDocs.docs[0].data();
+            hasPin = !!(data.pinHash && data.pinSalt);
+          }
+        }
+
+        return NextResponse.json({ exists, hasPin });
       }
 
       case 'register': {
-        // Register new user with phone + PIN
         if (!phoneNumber || !pin) {
           return NextResponse.json({ error: 'Phone number and PIN are required' }, { status: 400 });
         }
 
-        if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-          return NextResponse.json({ error: 'PIN must be exactly 4 digits' }, { status: 400 });
+        if (pin.length !== 4) {
+          return NextResponse.json({ error: 'PIN must be 4 digits' }, { status: 400 });
         }
 
         try {
-          const result = await registerWithPin(phoneNumber, pin);
+          const { session, anonymousName } = await registerWithPin(phoneNumber, pin);
           return NextResponse.json({
             success: true,
             session: {
-              sessionId: result.session.sessionId,
-              chatId: result.session.chatId,
-              anonymousName: result.anonymousName,
+              sessionId: session.sessionId,
+              chatId: session.chatId,
+              anonymousName,
               isNew: true,
-              expiresAt: result.session.expiresAt.toDate().toISOString(),
+              expiresAt: session.expiresAt.toDate().toISOString(),
             },
           });
         } catch (err: unknown) {
           const error = err as Error;
           if (error.message === 'PHONE_ALREADY_REGISTERED') {
-            return NextResponse.json({ error: 'Phone number already registered. Please login instead.' }, { status: 409 });
+            return NextResponse.json({ error: 'PHONE_ALREADY_REGISTERED' }, { status: 409 });
           }
           throw err;
         }
       }
 
       case 'login': {
-        // Login with phone + PIN
         if (!phoneNumber || !pin) {
           return NextResponse.json({ error: 'Phone number and PIN are required' }, { status: 400 });
         }
 
         try {
-          const result = await loginWithPin(phoneNumber, pin);
+          const { session, anonymousName } = await loginWithPin(phoneNumber, pin);
           return NextResponse.json({
             success: true,
             session: {
-              sessionId: result.session.sessionId,
-              chatId: result.session.chatId,
-              anonymousName: result.anonymousName,
+              sessionId: session.sessionId,
+              chatId: session.chatId,
+              anonymousName,
               isNew: false,
-              expiresAt: result.session.expiresAt.toDate().toISOString(),
+              expiresAt: session.expiresAt.toDate().toISOString(),
             },
           });
         } catch (err: unknown) {
           const error = err as Error;
+          if (error.message === 'INVALID_PIN') {
+            return NextResponse.json({ error: 'INVALID_PIN' }, { status: 401 });
+          }
           if (error.message === 'USER_NOT_FOUND') {
-            return NextResponse.json({ error: 'No account found. Please register first.' }, { status: 404 });
+            return NextResponse.json({ error: 'USER_NOT_FOUND' }, { status: 404 });
           }
           if (error.message === 'NO_PIN_SET') {
-            return NextResponse.json({ error: 'NO_PIN_SET', needsPin: true }, { status: 403 });
-          }
-          if (error.message === 'INVALID_PIN') {
-            return NextResponse.json({ error: 'Incorrect PIN. Please try again.' }, { status: 401 });
+            return NextResponse.json({ error: 'NO_PIN_SET' }, { status: 400 });
           }
           throw err;
         }
       }
 
       case 'set-pin': {
-        // Set PIN for legacy user (migrating from OTP)
         if (!phoneNumber || !pin) {
           return NextResponse.json({ error: 'Phone number and PIN are required' }, { status: 400 });
         }
 
-        if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-          return NextResponse.json({ error: 'PIN must be exactly 4 digits' }, { status: 400 });
+        if (pin.length !== 4) {
+          return NextResponse.json({ error: 'PIN must be 4 digits' }, { status: 400 });
         }
 
         try {
-          const result = await setPinForExistingUser(phoneNumber, pin);
+          const { session, anonymousName } = await setPinForExistingUser(phoneNumber, pin);
           return NextResponse.json({
             success: true,
             session: {
-              sessionId: result.session.sessionId,
-              chatId: result.session.chatId,
-              anonymousName: result.anonymousName,
+              sessionId: session.sessionId,
+              chatId: session.chatId,
+              anonymousName,
               isNew: false,
-              expiresAt: result.session.expiresAt.toDate().toISOString(),
+              expiresAt: session.expiresAt.toDate().toISOString(),
             },
           });
         } catch (err: unknown) {
           const error = err as Error;
           if (error.message === 'USER_NOT_FOUND') {
-            return NextResponse.json({ error: 'No account found.' }, { status: 404 });
+            return NextResponse.json({ error: 'USER_NOT_FOUND' }, { status: 404 });
           }
           throw err;
         }
@@ -136,7 +173,7 @@ export async function POST(request: NextRequest) {
         }
 
         const result = await validateSession(sessionId);
-
+        
         if (!result.valid) {
           return NextResponse.json({ valid: false, error: result.error }, { status: 401 });
         }

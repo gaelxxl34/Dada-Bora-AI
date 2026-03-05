@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
-import { validateSession, extendSession } from '@/lib/otp-verification';
+import { validateSession, extendSession } from '@/lib/pin-auth';
 import { applyRateLimit } from '@/lib/auth-middleware';
 import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { validateMessage, sanitizeMessage } from '@/lib/chat-utils';
@@ -59,10 +59,12 @@ async function getAIResponse(
     const config = configDoc.data();
 
     if (!config || !config.enabled) {
+      console.error('❌ AI config missing or disabled:', { exists: !!config, enabled: config?.enabled });
       return { response: '', tokensUsed: 0 };
     }
 
     const { provider, openaiApiKey, anthropicApiKey, model, temperature, maxTokens } = config;
+    console.log('🤖 AI config:', { provider, model, hasOpenAIKey: !!openaiApiKey, hasAnthropicKey: !!anthropicApiKey });
 
     // Fetch relevant knowledge
     const knowledgeBaseContent = await getRelevantKnowledge(userMessage, 2);
@@ -105,7 +107,7 @@ async function getAIResponse(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: model || 'gpt-4-turbo-preview',
+          model: model || 'gpt-4o',
           messages,
           temperature: isCrisis ? 0.5 : (temperature || 0.7),
           max_tokens: maxTokens || 500,
@@ -115,10 +117,11 @@ async function getAIResponse(
       const data = await response.json();
       
       if (!response.ok) {
-        console.error('OpenAI API Error:', data);
+        console.error('❌ OpenAI API Error:', response.status, JSON.stringify(data));
         return { response: '', tokensUsed: 0 };
       }
       
+      console.log('✅ OpenAI response received, tokens:', data.usage?.total_tokens);
       const tokensUsed = data.usage?.total_tokens || 0;
       return { response: data.choices?.[0]?.message?.content || '', tokensUsed };
 
@@ -146,14 +149,16 @@ async function getAIResponse(
       const data = await response.json();
 
       if (!response.ok) {
-        console.error('Anthropic API Error:', data);
+        console.error('❌ Anthropic API Error:', response.status, JSON.stringify(data));
         return { response: '', tokensUsed: 0 };
       }
       
+      console.log('✅ Anthropic response received');
       const tokensUsed = (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
       return { response: data.content?.[0]?.text || '', tokensUsed };
     }
 
+    console.error('❌ No matching AI provider found. Provider:', provider, 'Has keys:', { openai: !!openaiApiKey, anthropic: !!anthropicApiKey });
     return { response: '', tokensUsed: 0 };
   } catch (error) {
     console.error('Error getting AI response:', error);
