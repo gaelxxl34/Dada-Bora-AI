@@ -1,7 +1,10 @@
 /**
- * ElevenLabs Text-to-Speech Integration
- * Provides natural voice for Dada Bora
+ * Text-to-Speech Integration
+ * Supports ElevenLabs and OpenAI TTS providers for Dada Bora's voice
  */
+
+// ─── TTS Provider Types ─────────────────────────────────────────────
+export type TTSProvider = 'elevenlabs' | 'openai';
 
 // Voice options suitable for Dada Bora (warm, female voices)
 export const DADA_VOICE_OPTIONS = [
@@ -13,6 +16,18 @@ export const DADA_VOICE_OPTIONS = [
 ] as const;
 
 export const DEFAULT_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'; // Sarah - warm and nurturing
+
+// OpenAI TTS voice options
+export const OPENAI_VOICE_OPTIONS = [
+  { id: 'nova', name: 'Nova', description: 'Warm and friendly — best for Dada Bora' },
+  { id: 'shimmer', name: 'Shimmer', description: 'Gentle and expressive' },
+  { id: 'alloy', name: 'Alloy', description: 'Balanced and natural' },
+  { id: 'echo', name: 'Echo', description: 'Clear and authoritative' },
+  { id: 'fable', name: 'Fable', description: 'Storytelling and engaging' },
+  { id: 'onyx', name: 'Onyx', description: 'Deep and confident' },
+] as const;
+
+export const DEFAULT_OPENAI_VOICE = 'nova'; // Warm, great for Dada Bora
 
 interface TTSOptions {
   text: string;
@@ -122,6 +137,58 @@ function cleanTextForSpeech(text: string): string {
 export function estimateTTSCost(text: string): number {
   const cleaned = cleanTextForSpeech(text);
   return (cleaned.length / 1000) * 0.30;
+}
+
+// ─── OpenAI TTS ─────────────────────────────────────────────────────
+
+export interface OpenAITTSOptions {
+  text: string;
+  apiKey: string;
+  voice?: string;
+  model?: 'tts-1' | 'tts-1-hd';
+  speed?: number;
+}
+
+/**
+ * Generate speech audio using OpenAI TTS
+ * Returns audio as ArrayBuffer (mp3)
+ * Cost: $0.015/1K chars (tts-1), $0.030/1K chars (tts-1-hd)
+ */
+export async function generateSpeechOpenAI(options: OpenAITTSOptions): Promise<ArrayBuffer> {
+  const {
+    text,
+    apiKey,
+    voice = DEFAULT_OPENAI_VOICE,
+    model = 'tts-1',
+    speed = 1.0,
+  } = options;
+
+  const cleanedText = cleanTextForSpeech(text);
+
+  // OpenAI TTS has a 4096 character limit per request
+  const truncated = cleanedText.slice(0, 4096);
+
+  const response = await fetch('https://api.openai.com/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      input: truncated,
+      voice,
+      response_format: 'mp3',
+      speed,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI TTS failed: ${response.status} - ${errorText}`);
+  }
+
+  return response.arrayBuffer();
 }
 
 /**

@@ -90,6 +90,43 @@ export default function DadaBoraARViewer({ onClose, sessionId }: DadaBoraARViewe
     }
   }, []);
 
+  // ─── Browser TTS fallback (when ElevenLabs quota exceeded) ──────
+  const playBrowserTTS = useCallback((text: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (!('speechSynthesis' in window)) {
+        reject(new Error('SpeechSynthesis not supported'));
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      utterance.pitch = 1.05;
+      utterance.volume = 1;
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(v =>
+        /samantha|karen|moira|fiona|tessa|victoria|zira/i.test(v.name) && v.lang.startsWith('en')
+      ) || voices.find(v => v.lang.startsWith('en'));
+      if (preferredVoice) utterance.voice = preferredVoice;
+
+      setIsSpeaking(true);
+      startAnimation();
+
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        stopAnimation();
+        setResponseText('');
+        resolve();
+      };
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        stopAnimation();
+        setResponseText('');
+        reject(new Error('Browser TTS failed'));
+      };
+      window.speechSynthesis.speak(utterance);
+    });
+  }, [startAnimation, stopAnimation]);
+
   // ─── TTS playback ─────────────────────────────────────────────────
   const playAudioResponse = useCallback(async (text: string) => {
     try {
@@ -99,7 +136,21 @@ export default function DadaBoraARViewer({ onClose, sessionId }: DadaBoraARViewe
         body: JSON.stringify({ text, sessionId }),
       });
 
-      if (!res.ok) throw new Error('TTS failed');
+      if (!res.ok) {
+        // Check for quota exceeded → fallback to browser TTS
+        try {
+          const errorData = await res.json();
+          if (errorData.fallbackToBrowser) {
+            console.info('ElevenLabs quota exceeded, using browser TTS fallback');
+            await playBrowserTTS(text);
+            return;
+          }
+        } catch {
+          // Couldn't parse, try browser TTS anyway
+        }
+        await playBrowserTTS(text);
+        return;
+      }
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -156,10 +207,15 @@ export default function DadaBoraARViewer({ onClose, sessionId }: DadaBoraARViewe
       }
     } catch (err) {
       console.error('TTS playback error:', err);
-      setIsSpeaking(false);
-      stopAnimation();
+      // Last resort: try browser TTS
+      try {
+        await playBrowserTTS(text);
+      } catch {
+        setIsSpeaking(false);
+        stopAnimation();
+      }
     }
-  }, [sessionId, startAnimation, stopAnimation]);
+  }, [sessionId, startAnimation, stopAnimation, playBrowserTTS]);
 
   // ─── Send message to AI ───────────────────────────────────────────
   const sendMessage = useCallback(async (message: string) => {

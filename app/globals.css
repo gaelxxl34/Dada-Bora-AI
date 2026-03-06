@@ -102,6 +102,13 @@ a:focus-visible {
   @apply bg-gold/30 text-warm-brown;
 }
 
+/* Prevent iOS Safari auto-zoom on input focus (requires font-size >= 16px) */
+@supports (-webkit-touch-callout: none) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
 /* Phone input custom styles */
 .phone-input-custom {
   @apply w-full;

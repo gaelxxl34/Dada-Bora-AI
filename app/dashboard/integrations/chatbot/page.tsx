@@ -7,7 +7,7 @@ import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiPost } from '@/lib/api-client';
-import { DADA_VOICE_OPTIONS, DEFAULT_VOICE_ID } from '@/lib/elevenlabs';
+import { DADA_VOICE_OPTIONS, DEFAULT_VOICE_ID, OPENAI_VOICE_OPTIONS, DEFAULT_OPENAI_VOICE, type TTSProvider } from '@/lib/elevenlabs';
 
 interface ChatbotConfig {
   provider: 'openai' | 'anthropic';
@@ -24,12 +24,16 @@ interface ChatbotConfig {
 
 interface VoiceConfig {
   enabled: boolean;
+  ttsProvider: TTSProvider;
   elevenLabsApiKey: string;
   voiceId: string;
   stability: number;
   similarityBoost: number;
   style: number;
   autoPlayResponses: boolean;
+  openaiVoice: string;
+  openaiSpeed: number;
+  openaiTTSModel: string;
 }
 
 interface TestMessage {
@@ -79,12 +83,16 @@ export default function ChatbotSettingsPage() {
   const [showElevenLabsKey, setShowElevenLabsKey] = useState(false);
   const [voiceConfig, setVoiceConfig] = useState<VoiceConfig>({
     enabled: false,
+    ttsProvider: 'openai',
     elevenLabsApiKey: '',
     voiceId: DEFAULT_VOICE_ID,
     stability: 0.5,
     similarityBoost: 0.75,
     style: 0.3,
     autoPlayResponses: true,
+    openaiVoice: DEFAULT_OPENAI_VOICE,
+    openaiSpeed: 1.0,
+    openaiTTSModel: 'tts-1',
   });
   const [config, setConfig] = useState<ChatbotConfig>({
     provider: 'openai',
@@ -503,7 +511,7 @@ export default function ChatbotSettingsPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <i className="ri-mic-line text-warm-brown" />
-              Voice (ElevenLabs TTS)
+              Voice (Text-to-Speech)
             </h3>
             
             <div className="space-y-4">
@@ -529,115 +537,217 @@ export default function ChatbotSettingsPage() {
 
               {voiceConfig.enabled && (
                 <>
-                  {/* ElevenLabs API Key */}
+                  {/* TTS Provider Selection */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      ElevenLabs API Key
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      TTS Provider
                     </label>
-                    <div className="relative">
-                      <input
-                        type={showElevenLabsKey ? 'text' : 'password'}
-                        value={voiceConfig.elevenLabsApiKey}
-                        onChange={(e) => setVoiceConfig({ ...voiceConfig, elevenLabsApiKey: e.target.value })}
-                        placeholder="Enter your ElevenLabs API key"
-                        className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-brown focus:border-transparent"
-                      />
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => setShowElevenLabsKey(!showElevenLabsKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        onClick={() => setVoiceConfig({ ...voiceConfig, ttsProvider: 'openai' })}
+                        className={`flex-1 py-2 px-4 rounded-lg border text-sm font-medium transition-colors ${
+                          voiceConfig.ttsProvider === 'openai'
+                            ? 'border-warm-brown bg-warm-brown/10 text-warm-brown'
+                            : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
                       >
-                        <i className={showElevenLabsKey ? 'ri-eye-off-line' : 'ri-eye-line'} />
+                        OpenAI TTS
+                      </button>
+                      <button
+                        onClick={() => setVoiceConfig({ ...voiceConfig, ttsProvider: 'elevenlabs' })}
+                        className={`flex-1 py-2 px-4 rounded-lg border text-sm font-medium transition-colors ${
+                          voiceConfig.ttsProvider === 'elevenlabs'
+                            ? 'border-warm-brown bg-warm-brown/10 text-warm-brown'
+                            : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        ElevenLabs
                       </button>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      Get your API key at{' '}
-                      <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer" className="text-warm-brown hover:underline">
-                        elevenlabs.io
-                      </a>
+                      {voiceConfig.ttsProvider === 'openai' 
+                        ? 'Uses the OpenAI API key configured above. ~$0.015/1K characters.' 
+                        : 'Requires a separate ElevenLabs API key. Free tier: 10,000 chars/month.'}
                     </p>
                   </div>
 
-                  {/* Voice Selection */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Dada&apos;s Voice
-                    </label>
-                    <select
-                      value={voiceConfig.voiceId}
-                      onChange={(e) => setVoiceConfig({ ...voiceConfig, voiceId: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-brown focus:border-transparent"
-                    >
-                      {DADA_VOICE_OPTIONS.map((voice) => (
-                        <option key={voice.id} value={voice.id}>
-                          {voice.name} — {voice.description}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Choose a voice that feels right for Dada. You can also use a custom voice ID from ElevenLabs.
-                    </p>
-                  </div>
+                  {/* OpenAI TTS Settings */}
+                  {voiceConfig.ttsProvider === 'openai' && (
+                    <>
+                      {/* OpenAI Voice Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Dada&apos;s Voice
+                        </label>
+                        <select
+                          value={voiceConfig.openaiVoice}
+                          onChange={(e) => setVoiceConfig({ ...voiceConfig, openaiVoice: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-brown focus:border-transparent"
+                        >
+                          {OPENAI_VOICE_OPTIONS.map((voice) => (
+                            <option key={voice.id} value={voice.id}>
+                              {voice.name} — {voice.description}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Choose a voice personality for Dada. &quot;Nova&quot; works best for warm, conversational responses.
+                        </p>
+                      </div>
 
-                  {/* Voice Settings */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-sm font-medium text-gray-700">Stability</label>
-                        <span className="text-xs font-semibold text-warm-brown">{voiceConfig.stability.toFixed(2)}</span>
+                      {/* OpenAI TTS Model */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          TTS Model
+                        </label>
+                        <select
+                          value={voiceConfig.openaiTTSModel}
+                          onChange={(e) => setVoiceConfig({ ...voiceConfig, openaiTTSModel: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-brown focus:border-transparent"
+                        >
+                          <option value="tts-1">tts-1 — Fast, good quality</option>
+                          <option value="tts-1-hd">tts-1-hd — Higher quality, slightly slower</option>
+                        </select>
                       </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={voiceConfig.stability}
-                        onChange={(e) => setVoiceConfig({ ...voiceConfig, stability: parseFloat(e.target.value) })}
-                        className="w-full"
-                      />
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>Expressive</span>
-                        <span>Stable</span>
+
+                      {/* OpenAI Speed */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-sm font-medium text-gray-700">Speed</label>
+                          <span className="text-xs font-semibold text-warm-brown">{voiceConfig.openaiSpeed.toFixed(2)}x</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.25"
+                          max="4.0"
+                          step="0.25"
+                          value={voiceConfig.openaiSpeed}
+                          onChange={(e) => setVoiceConfig({ ...voiceConfig, openaiSpeed: parseFloat(e.target.value) })}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>0.25x</span>
+                          <span>1.0x</span>
+                          <span>4.0x</span>
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-sm font-medium text-gray-700">Clarity</label>
-                        <span className="text-xs font-semibold text-warm-brown">{voiceConfig.similarityBoost.toFixed(2)}</span>
+                    </>
+                  )}
+
+                  {/* ElevenLabs Settings */}
+                  {voiceConfig.ttsProvider === 'elevenlabs' && (
+                    <>
+                      {/* ElevenLabs API Key */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          ElevenLabs API Key
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showElevenLabsKey ? 'text' : 'password'}
+                            value={voiceConfig.elevenLabsApiKey}
+                            onChange={(e) => setVoiceConfig({ ...voiceConfig, elevenLabsApiKey: e.target.value })}
+                            placeholder="Enter your ElevenLabs API key"
+                            className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-brown focus:border-transparent"
+                          />
+                          <button
+                            onClick={() => setShowElevenLabsKey(!showElevenLabsKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            <i className={showElevenLabsKey ? 'ri-eye-off-line' : 'ri-eye-line'} />
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Get your API key at{' '}
+                          <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer" className="text-warm-brown hover:underline">
+                            elevenlabs.io
+                          </a>
+                        </p>
                       </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={voiceConfig.similarityBoost}
-                        onChange={(e) => setVoiceConfig({ ...voiceConfig, similarityBoost: parseFloat(e.target.value) })}
-                        className="w-full"
-                      />
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>Natural</span>
-                        <span>Clear</span>
+
+                      {/* Voice Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Dada&apos;s Voice
+                        </label>
+                        <select
+                          value={voiceConfig.voiceId}
+                          onChange={(e) => setVoiceConfig({ ...voiceConfig, voiceId: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-brown focus:border-transparent"
+                        >
+                          {DADA_VOICE_OPTIONS.map((voice) => (
+                            <option key={voice.id} value={voice.id}>
+                              {voice.name} — {voice.description}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Choose a voice that feels right for Dada. You can also use a custom voice ID from ElevenLabs.
+                        </p>
                       </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-sm font-medium text-gray-700">Style</label>
-                        <span className="text-xs font-semibold text-warm-brown">{voiceConfig.style.toFixed(2)}</span>
+
+                      {/* Voice Settings */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-sm font-medium text-gray-700">Stability</label>
+                            <span className="text-xs font-semibold text-warm-brown">{voiceConfig.stability.toFixed(2)}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={voiceConfig.stability}
+                            onChange={(e) => setVoiceConfig({ ...voiceConfig, stability: parseFloat(e.target.value) })}
+                            className="w-full"
+                          />
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Expressive</span>
+                            <span>Stable</span>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-sm font-medium text-gray-700">Clarity</label>
+                            <span className="text-xs font-semibold text-warm-brown">{voiceConfig.similarityBoost.toFixed(2)}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={voiceConfig.similarityBoost}
+                            onChange={(e) => setVoiceConfig({ ...voiceConfig, similarityBoost: parseFloat(e.target.value) })}
+                            className="w-full"
+                          />
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Natural</span>
+                            <span>Clear</span>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-sm font-medium text-gray-700">Style</label>
+                            <span className="text-xs font-semibold text-warm-brown">{voiceConfig.style.toFixed(2)}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={voiceConfig.style}
+                            onChange={(e) => setVoiceConfig({ ...voiceConfig, style: parseFloat(e.target.value) })}
+                            className="w-full"
+                          />
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Neutral</span>
+                            <span>Expressive</span>
+                          </div>
+                        </div>
                       </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={voiceConfig.style}
-                        onChange={(e) => setVoiceConfig({ ...voiceConfig, style: parseFloat(e.target.value) })}
-                        className="w-full"
-                      />
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>Neutral</span>
-                        <span>Expressive</span>
-                      </div>
-                    </div>
-                  </div>
+                    </>
+                  )}
 
                   {/* Auto-play setting */}
                   <div className="flex items-center justify-between">

@@ -109,16 +109,55 @@ export default function WebChatPage() {
   useEffect(() => {
     const checkVoice = async () => {
       try {
-        const res = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'test' }) });
-        // 503 means no ElevenLabs API key configured
-        // 200 means it works (we get audio back)
-        setVoiceEnabled(res.ok);
+        // Use GET to check status — avoids wasting ElevenLabs credits
+        const res = await fetch('/api/tts');
+        if (res.ok) {
+          const data = await res.json();
+          // Voice is available if ElevenLabs works OR browser TTS can fallback
+          setVoiceEnabled(data.available || ('speechSynthesis' in window));
+        } else {
+          setVoiceEnabled('speechSynthesis' in window);
+        }
       } catch {
-        setVoiceEnabled(false);
+        setVoiceEnabled('speechSynthesis' in window);
       }
     };
     checkVoice();
   }, []);
+
+  // Browser-native TTS fallback (used when ElevenLabs quota is exceeded)
+  const playBrowserTTS = (text: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (!('speechSynthesis' in window)) {
+        reject(new Error('SpeechSynthesis not supported'));
+        return;
+      }
+
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      utterance.pitch = 1.05;
+      utterance.volume = 1;
+
+      // Try to pick a good female voice
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(v =>
+        /samantha|karen|moira|fiona|tessa|victoria|zira/i.test(v.name) && v.lang.startsWith('en')
+      ) || voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
+        || voices.find(v => v.lang.startsWith('en'));
+
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      utterance.onend = () => resolve();
+      utterance.onerror = (e) => reject(e);
+
+      window.speechSynthesis.speak(utterance);
+    });
+  };
 
   // Play Dada's response as audio
   const playAudioResponse = async (text: string) => {
@@ -136,9 +175,25 @@ export default function WebChatPage() {
       });
 
       if (!response.ok) {
-        // Silently skip if voice not configured (503) or other error
-        if (response.status !== 503) {
-          console.error('TTS failed:', response.status);
+        // Check if we should fallback to browser TTS
+        if (response.status === 503 || response.status === 500) {
+          try {
+            const errorData = await response.json();
+            if (errorData.fallbackToBrowser) {
+              console.info('ElevenLabs quota exceeded, using browser TTS fallback');
+              await playBrowserTTS(text);
+              setIsPlaying(false);
+              return;
+            }
+          } catch {
+            // Couldn't parse JSON, try browser fallback anyway
+          }
+          // Try browser TTS as last resort
+          try {
+            await playBrowserTTS(text);
+          } catch {
+            console.error('Both ElevenLabs and browser TTS failed');
+          }
         }
         setIsPlaying(false);
         return;
@@ -166,6 +221,12 @@ export default function WebChatPage() {
       await audio.play();
     } catch (err) {
       console.error('Audio playback failed:', err);
+      // Last resort: try browser TTS
+      try {
+        await playBrowserTTS(text);
+      } catch {
+        // Both failed, silent fallback
+      }
       setIsPlaying(false);
     }
   };
@@ -175,6 +236,11 @@ export default function WebChatPage() {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
+      setIsPlaying(false);
+    }
+    // Also stop browser TTS if running
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
       setIsPlaying(false);
     }
   };
@@ -1108,7 +1174,7 @@ export default function WebChatPage() {
                     }}
                     onKeyDown={handleKeyPress}
                     placeholder={t.messagePlaceholder}
-                    className="flex-1 bg-transparent border-none outline-none resize-none text-[14px] sm:text-[15px] leading-snug py-1.5 max-h-[100px] placeholder:text-gray-400"
+                    className="flex-1 bg-transparent border-none outline-none resize-none text-[16px] leading-snug py-1.5 max-h-[100px] placeholder:text-gray-400"
                     rows={1}
                     style={{ height: 'auto' }}
                   />
