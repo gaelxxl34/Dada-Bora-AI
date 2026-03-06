@@ -45,27 +45,27 @@ const translations = {
   en: {
     hero: {
       title: 'The Big Sister You Wish You Had',
-      subtitle: 'Your AI-powered companion for emotional wellness, self-care, and holistic guidance — built for Black women, by Black women.',
+      subtitle: 'Your AI-powered companion for emotional wellness, self-care, and holistic guidance — built by African founders, for every woman.',
       chatWhatsApp: 'Chat on WhatsApp',
       joinWaitlist: 'Join Waitlist'
     },
     about: {
       title: 'Empowering Women Through Intelligent Care',
-      paragraph1: "Dada Bora isn't just another chatbot — she's the trusted companion you've been searching for. Born from the understanding that Black women deserve wellness solutions that truly see them, honor their experiences, and celebrate their strength.",
+      paragraph1: "Dada Bora isn't just another chatbot — she's the trusted companion you've been searching for. Born from the understanding that every woman deserves wellness solutions that truly see her, honor her experiences, and celebrate her strength.",
       paragraph2: "We bridge the gap between technology and empathy, creating a safe space where your wellness journey is supported with cultural understanding, genuine care, and the wisdom of sisterhood.",
-      quote: "Every Black woman deserves a companion who understands her journey — someone who celebrates her strength while nurturing her wellness.",
+      quote: "Every woman deserves a companion who understands her journey — someone who celebrates her strength while nurturing her wellness.",
       quoteAuthor: '— Dr. Adam Shebindu, PhD, MBA, Founder'
     },
     problem: {
       title: 'Addressing the Wellness Gap',
-      subtitle: 'Black women face unique challenges in accessing wellness support that truly understands their lived experiences.',
+      subtitle: 'Women face unique challenges in accessing wellness support that truly understands their lived experiences.',
       limitedAccess: {
         title: 'Limited Access',
-        description: 'Culturally aware, affordable health tools are scarce, leaving Black women navigating wellness without proper support.'
+        description: 'Culturally aware, affordable health tools are scarce, leaving women navigating wellness without proper support.'
       },
       fragmented: {
         title: 'Fragmented Solutions',
-        description: 'Most apps ignore the intersection of emotional, mental, and lifestyle needs that Black women uniquely experience.'
+        description: 'Most apps ignore the intersection of emotional, mental, and lifestyle needs that women uniquely experience.'
       },
       barriers: {
         title: 'Societal Barriers',
@@ -85,7 +85,7 @@ const translations = {
       },
       culturallyGrounded: {
         title: 'Culturally Grounded',
-        description: "Built with deep understanding of Black women's experiences and needs"
+        description: "Built with deep understanding of women's diverse experiences and needs"
       },
       privacyFocused: {
         title: 'Privacy Focused',
@@ -109,7 +109,7 @@ const translations = {
     },
     pillars: {
       title: 'The Heart of Dada Bora',
-      subtitle: 'Three core pillars of wellness support, designed specifically for the unique needs of Black women.',
+      subtitle: 'Three core pillars of wellness support, designed for every woman\'s unique needs.',
       mentalWellness: {
         title: 'Mental Wellness',
         description: 'Grounding techniques, daily affirmations, mood support, and emotional wellness guidance',
@@ -117,7 +117,7 @@ const translations = {
       },
       hairSkin: {
         title: 'Hair & Skin Care',
-        description: 'Personalized beauty tips, product recommendations, and care routines for Black women',
+        description: 'Personalized beauty tips, product recommendations, and care routines tailored to you',
         features: ['Natural hair care', 'Skincare routines', 'Product recommendations', 'Seasonal adjustments']
       },
       menstrual: {
@@ -129,8 +129,8 @@ const translations = {
       holisticDescription: 'Because your wellness journey encompasses mind, body, and spirit — Dada Bora understands that true health means caring for every aspect of who you are.'
     },
     market: {
-      title: 'Built for Black Women Everywhere',
-      subtitle: 'Created by African founders with a global vision — reaching Black women across continents with culturally grounded wellness support.',
+      title: 'Built for Women Everywhere',
+      subtitle: 'Created by African founders with a global vision — reaching women across continents with culturally grounded wellness support.',
       stats: {
         africa: {
           number: '300M',
@@ -138,19 +138,19 @@ const translations = {
         },
         us: {
           number: '20M+',
-          label: 'Black Women in the U.S.'
+          label: 'Women in the U.S.'
         },
         whatsapp: {
           number: '80%',
           label: 'WhatsApp Penetration'
         }
       },
-      foundersTitle: 'By African Founders, For Black Women Globally',
+      foundersTitle: 'By African Founders, For Women Globally',
       foundersDescription: "Our team understands the unique intersection of culture, wellness, and technology. We're not just building an app — we're creating a movement that honors our heritage while embracing innovation for better health outcomes."
     },
     journey: {
       title: 'Our Story So Far',
-      subtitle: 'From an idea born in Africa to a global movement empowering Black women worldwide.',
+      subtitle: 'From an idea born in Africa to a global movement empowering women worldwide.',
       mvp: {
         title: 'MVP Testing in DRC 🇨🇩',
         description: 'Launched our first pilot program with women in the Democratic Republic of Congo'
@@ -165,12 +165,12 @@ const translations = {
       },
       usExpansion: {
         title: 'U.S. Expansion',
-        description: 'Bringing Dada Bora to Black women across America — join our waitlist!'
+        description: 'Bringing Dada Bora to women across America — join our waitlist!'
       },
       completed: 'Completed',
       comingSoon: 'Coming Soon',
       continuesTitle: 'The Journey Continues',
-      continuesDescription: 'Every milestone brings us closer to our vision: a world where every Black woman has access to culturally competent, compassionate wellness support.'
+      continuesDescription: 'Every milestone brings us closer to our vision: a world where every woman has access to culturally competent, compassionate wellness support.'
     },
     team: {
       title: 'Meet the Minds Behind Dada Bora',
@@ -211,7 +211,7 @@ const translations = {
       title1: 'Your wellness.',
       title2: 'Your voice.',
       title3: 'Your Dada Bora.',
-      subtitle: 'Join thousands of Black women who are reclaiming their wellness journey with compassionate, culturally grounded AI support.',
+      subtitle: 'Join thousands of women who are reclaiming their wellness journey with compassionate, culturally grounded AI support.',
       chatWhatsApp: 'Chat on WhatsApp',
       subscribe: 'Subscribe for Updates',
       testimonial: '"Dada Bora changed how I approach my wellness. For the first time, I feel truly seen and supported."',
@@ -272,33 +272,33 @@ const translations = {
       ourTeam: 'Our Team',
       connect: 'Connect',
       privacy: 'Your privacy and data security are our top priorities.',
-      copyright: '© 2024 Bora Technology. Built with love for Black women everywhere.'
+      copyright: '© 2024 Bora Technology. Built with love for women everywhere.'
     }
   },
   fr: {
     hero: {
       title: 'La Grande Sœur Que Vous Auriez Aimé Avoir',
-      subtitle: 'Votre compagne alimentée par IA pour le bien-être émotionnel, les soins personnels et les conseils holistiques — conçue pour les femmes noires, par des femmes noires.',
+      subtitle: 'Votre compagne alimentée par IA pour le bien-être émotionnel, les soins personnels et les conseils holistiques — créée par des fondateurs africains, pour chaque femme.',
       chatWhatsApp: 'Discuter sur WhatsApp',
       joinWaitlist: 'Rejoindre la Liste d\'Attente'
     },
     about: {
       title: 'Autonomiser les Femmes par des Soins Intelligents',
-      paragraph1: "Dada Bora n'est pas qu'un simple chatbot — c'est la compagne de confiance que vous recherchiez. Née de la conviction que les femmes noires méritent des solutions de bien-être qui les voient vraiment, honorent leurs expériences et célèbrent leur force.",
+      paragraph1: "Dada Bora n'est pas qu'un simple chatbot — c'est la compagne de confiance que vous recherchiez. Née de la conviction que chaque femme mérite des solutions de bien-être qui la voient vraiment, honorent ses expériences et célèbrent sa force.",
       paragraph2: "Nous comblons le fossé entre technologie et empathie, créant un espace sûr où votre parcours de bien-être est soutenu par une compréhension culturelle, des soins authentiques et la sagesse de la sororité.",
-      quote: "Chaque femme noire mérite une compagne qui comprend son parcours — quelqu'un qui célèbre sa force tout en nourrissant son bien-être.",
+      quote: "Chaque femme mérite une compagne qui comprend son parcours — quelqu'un qui célèbre sa force tout en nourrissant son bien-être.",
       quoteAuthor: '— Dr. Adam Shebindu, PhD, MBA, Fondateur'
     },
     problem: {
       title: 'Combler le Fossé du Bien-être',
-      subtitle: 'Les femmes noires font face à des défis uniques pour accéder à un soutien de bien-être qui comprend vraiment leurs expériences vécues.',
+      subtitle: 'Les femmes font face à des défis uniques pour accéder à un soutien de bien-être qui comprend vraiment leurs expériences vécues.',
       limitedAccess: {
         title: 'Accès Limité',
-        description: 'Les outils de santé culturellement conscients et abordables sont rares, laissant les femmes noires naviguer le bien-être sans soutien adéquat.'
+        description: 'Les outils de santé culturellement conscients et abordables sont rares, laissant les femmes naviguer le bien-être sans soutien adéquat.'
       },
       fragmented: {
         title: 'Solutions Fragmentées',
-        description: 'La plupart des applications ignorent l\'intersection des besoins émotionnels, mentaux et de style de vie que les femmes noires vivent de manière unique.'
+        description: 'La plupart des applications ignorent l\'intersection des besoins émotionnels, mentaux et de style de vie que les femmes vivent de manière unique.'
       },
       barriers: {
         title: 'Barrières Sociétales',
@@ -318,7 +318,7 @@ const translations = {
       },
       culturallyGrounded: {
         title: 'Ancrée Culturellement',
-        description: 'Construite avec une profonde compréhension des expériences et besoins des femmes noires'
+        description: 'Construite avec une profonde compréhension des expériences et besoins diversifiés des femmes'
       },
       privacyFocused: {
         title: 'Axée sur la Confidentialité',
@@ -342,7 +342,7 @@ const translations = {
     },
     pillars: {
       title: 'Le Cœur de Dada Bora',
-      subtitle: 'Trois piliers fondamentaux de soutien au bien-être, conçus spécifiquement pour les besoins uniques des femmes noires.',
+      subtitle: 'Trois piliers fondamentaux de soutien au bien-être, conçus pour les besoins uniques de chaque femme.',
       mentalWellness: {
         title: 'Bien-être Mental',
         description: 'Techniques d\'ancrage, affirmations quotidiennes, soutien de l\'humeur et conseils de bien-être émotionnel',
@@ -350,7 +350,7 @@ const translations = {
       },
       hairSkin: {
         title: 'Soins Capillaires et Cutanés',
-        description: 'Conseils beauté personnalisés, recommandations de produits et routines de soins pour les femmes noires',
+        description: 'Conseils beauté personnalisés, recommandations de produits et routines de soins adaptées à vous',
         features: ['Soins capillaires naturels', 'Routines de soins de la peau', 'Recommandations de produits', 'Ajustements saisonniers']
       },
       menstrual: {
@@ -362,8 +362,8 @@ const translations = {
       holisticDescription: 'Parce que votre parcours de bien-être englobe l\'esprit, le corps et l\'âme — Dada Bora comprend que la vraie santé signifie prendre soin de chaque aspect de qui vous êtes.'
     },
     market: {
-      title: 'Conçue pour les Femmes Noires Partout',
-      subtitle: 'Créée par des fondateurs africains avec une vision mondiale — touchant les femmes noires à travers les continents avec un soutien de bien-être culturellement ancré.',
+      title: 'Conçue pour les Femmes Partout',
+      subtitle: 'Créée par des fondateurs africains avec une vision mondiale — touchant les femmes à travers les continents avec un soutien de bien-être culturellement ancré.',
       stats: {
         africa: {
           number: '300M',
@@ -371,19 +371,19 @@ const translations = {
         },
         us: {
           number: '20M+',
-          label: 'Femmes Noires aux États-Unis'
+          label: 'Femmes aux États-Unis'
         },
         whatsapp: {
           number: '80%',
           label: 'Pénétration WhatsApp'
         }
       },
-      foundersTitle: 'Par des Fondateurs Africains, Pour les Femmes Noires Mondialement',
+      foundersTitle: 'Par des Fondateurs Africains, Pour les Femmes du Monde Entier',
       foundersDescription: "Notre équipe comprend l'intersection unique de la culture, du bien-être et de la technologie. Nous ne construisons pas seulement une application — nous créons un mouvement qui honore notre patrimoine tout en embrassant l'innovation pour de meilleurs résultats en matière de santé."
     },
     journey: {
       title: 'Notre Histoire Jusqu\'à Présent',
-      subtitle: 'D\'une idée née en Afrique à un mouvement mondial autonomisant les femmes noires dans le monde entier.',
+      subtitle: 'D\'une idée née en Afrique à un mouvement mondial autonomisant les femmes dans le monde entier.',
       mvp: {
         title: 'Test MVP en RDC 🇨🇩',
         description: 'Lancé notre premier programme pilote avec des femmes en République Démocratique du Congo'
@@ -398,12 +398,12 @@ const translations = {
       },
       usExpansion: {
         title: 'Expansion aux États-Unis',
-        description: 'Amener Dada Bora aux femmes noires à travers l\'Amérique — rejoignez notre liste d\'attente!'
+        description: 'Amener Dada Bora aux femmes à travers l\'Amérique — rejoignez notre liste d\'attente!'
       },
       completed: 'Terminé',
       comingSoon: 'Bientôt Disponible',
       continuesTitle: 'Le Parcours Continue',
-      continuesDescription: 'Chaque étape nous rapproche de notre vision : un monde où chaque femme noire a accès à un soutien de bien-être culturellement compétent et compatissant.'
+      continuesDescription: 'Chaque étape nous rapproche de notre vision : un monde où chaque femme a accès à un soutien de bien-être culturellement compétent et compatissant.'
     },
     team: {
       title: 'Rencontrez les Esprits Derrière Dada Bora',
@@ -444,7 +444,7 @@ const translations = {
       title1: 'Votre bien-être.',
       title2: 'Votre voix.',
       title3: 'Votre Dada Bora.',
-      subtitle: 'Rejoignez des milliers de femmes noires qui reprennent leur parcours de bien-être avec un soutien IA compatissant et culturellement ancré.',
+      subtitle: 'Rejoignez des milliers de femmes qui reprennent leur parcours de bien-être avec un soutien IA compatissant et culturellement ancré.',
       chatWhatsApp: 'Discuter sur WhatsApp',
       subscribe: 'S\'abonner aux Mises à Jour',
       testimonial: '"Dada Bora a changé ma façon d\'aborder mon bien-être. Pour la première fois, je me sens vraiment vue et soutenue."',
@@ -505,7 +505,7 @@ const translations = {
       ourTeam: 'Notre Équipe',
       connect: 'Connecter',
       privacy: 'Votre confidentialité et la sécurité de vos données sont nos priorités absolues.',
-      copyright: '© 2024 Bora Technology. Construit avec amour pour les femmes noires partout.'
+      copyright: '© 2024 Bora Technology. Construit avec amour pour les femmes partout.'
     }
   }
 };

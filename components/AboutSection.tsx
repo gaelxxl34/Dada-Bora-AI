@@ -41,7 +41,7 @@ export default function AboutSection() {
             <div className="relative">
               <img
                 src="/dada bora.PNG"
-                alt="Dada Bora AI - Your AI Wellness Companion for Black Women"
+                alt="Dada Bora AI - Your AI Wellness Companion for Every Woman"
                 className="rounded-2xl shadow-lg object-cover w-full aspect-[4/5] object-top"
               />
               {/* Subtle accent */}

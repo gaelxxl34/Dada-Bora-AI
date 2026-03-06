@@ -419,15 +419,17 @@ export default function KnowledgeBasePage() {
                           >
                             {category.count || 0}
                           </span>
-                          <button
+                          <span
+                            role="button"
+                            tabIndex={0}
                             onClick={(e) => {
                               e.stopPropagation();
                               setShowCategoryMenu(showCategoryMenu === category.id ? null : category.id);
                             }}
-                            className="p-1 hover:bg-white/10 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="p-1 hover:bg-white/10 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                           >
                             <i aria-hidden="true" className="ri-more-2-fill text-xs" />
-                          </button>
+                          </span>
                         </div>
                       </button>
 

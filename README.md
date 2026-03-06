@@ -1,6 +1,6 @@
 # Dada Bora 👑
 
-**Your Big Sister for All Seasons** - An AI-powered emotional support platform designed for Black women worldwide.
+**Your Big Sister for All Seasons** - An AI-powered emotional support platform designed for women everywhere.
 
 ## Features
 

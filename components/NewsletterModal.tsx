@@ -62,7 +62,7 @@ export default function NewsletterModal({ isOpen, onClose }: NewsletterModalProp
             <i className="ri-mail-heart-line text-2xl text-warm-brown w-6 h-6 flex items-center justify-center"></i>
           </div>
           <h3 className="text-2xl font-playfair font-bold text-warm-brown mb-2">Stay Connected</h3>
-          <p className="text-gray-600">Get the latest updates on Dada Bora's journey and wellness tips for Black women.</p>
+          <p className="text-gray-600">Get the latest updates on Dada Bora's journey and wellness tips for every woman.</p>
         </div>
         
         {submitStatus === 'success' ? (
