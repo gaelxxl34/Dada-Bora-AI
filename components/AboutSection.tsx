@@ -11,7 +11,7 @@ export default function AboutSection() {
       <div className="container-narrow">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           {/* Text Content */}
-          <div className="order-2 lg:order-1">
+          <div className="order-1">
             <span className="inline-block text-gold text-sm font-medium tracking-wide uppercase mb-3">
               About Us
             </span>
@@ -37,7 +37,7 @@ export default function AboutSection() {
           </div>
           
           {/* Image */}
-          <div className="order-1 lg:order-2">
+          <div className="order-2">
             <div className="relative">
               <img
                 src="/dada-bora.png"
