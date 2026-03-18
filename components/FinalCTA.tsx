@@ -26,7 +26,7 @@ export default function FinalCTA() {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
             <a 
-              href="https://wa.me/243856223405" 
+              href="https://wa.me/18778730388" 
               className="inline-flex items-center justify-center gap-3 bg-white text-warm-brown px-8 py-4 rounded-full font-semibold transition-all duration-200 hover:bg-gold hover:shadow-xl"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">

@@ -40,7 +40,7 @@ export default function AboutSection() {
           <div className="order-1 lg:order-2">
             <div className="relative">
               <img
-                src="/dada bora.PNG"
+                src="/dada-bora.png"
                 alt="Dada Bora AI - Your AI Wellness Companion for Every Woman"
                 className="rounded-2xl shadow-lg object-cover w-full aspect-[4/5] object-top"
               />
